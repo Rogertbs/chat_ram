@@ -1,0 +1,26 @@
+# Segredos / credenciais
+.env
+
+# Dumps e dados de banco (nunca versionar dados)
+*.sql
+*.sql.gz
+*.sql.bz2
+*.dump
+*.dump.gz
+*.bak
+
+# Dump específico do OTRS
+BackpOtrs.sql
+
+# Volumes e dados locais de banco
+*.mdb
+*.sqlite
+*.sqlite3
+*.db
+
+# Exceção: script de schema/DDL (sem dados), necessário ao init do postgres18
+!postgres18/init/001-extensions.sql
+
+# Python
+__pycache__/
+*.py[cod]

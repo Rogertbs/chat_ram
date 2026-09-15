@@ -1,0 +1,37 @@
+name: otrs-mariadb
+
+services:
+  mariadb:
+    image: mariadb:10.11
+    restart: unless-stopped
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?Configure MARIADB_ROOT_PASSWORD no .env}
+      MARIADB_DATABASE: otrs
+      MARIADB_USER: otrs
+      MARIADB_PASSWORD: ${MARIADB_PASSWORD:?Configure MARIADB_PASSWORD no .env}
+      TZ: UTC
+    command:
+      - --max-allowed-packet=128M
+      - --innodb-buffer-pool-size=512M
+      - --character-set-server=utf8
+      - --collation-server=utf8_unicode_ci
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mariadb_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 40s
+    networks:
+      otrs_migration:
+        aliases: [mariadb]
+
+volumes:
+  mariadb_data:
+
+networks:
+  otrs_migration:
+    name: otrs_migration
