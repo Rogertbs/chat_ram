@@ -12,6 +12,9 @@
 # Dump específico do OTRS
 BackpOtrs.sql
 
+# Backups locais (dump + checksum)
+backups/
+
 # Volumes e dados locais de banco
 *.mdb
 *.sqlite
