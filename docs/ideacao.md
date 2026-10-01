@@ -2,6 +2,8 @@
 
 > Rascunho evolutivo. Registra a visão, a arquitetura e as fases de construção, e será complementado com os requisitos do sistema e um guia de desenvolvimento.
 
+> **Versão 0.1:** o [escopo confirmado do MVP](mvp-0.1.md) delimita a primeira entrega, com uma [proposta inicial de arquitetura](arquitetura-0.1.md). Na 0.1, a API executará neste servidor e consumirá um proxy LiteLLM fornecido ao projeto; a implantação do LLM não faz parte da entrega. As fases abaixo preservam a visão mais ampla de evolução.
+
 ## 1. Visão
 
 Construir um assistente de chat local e privado (on-premise) integrado ao banco do OTRS, que:
@@ -22,7 +24,7 @@ O diretório atual contém os artefatos de migração do OTRS de MariaDB para Po
 - `migrate.sh` — converte MariaDB → PostgreSQL 15 via `pgloader`.
 - `verify.py` — valida contagens de registros e totais de bytes binários.
 
-O PostgreSQL 15 migrado contém os dados OTRS e é a fonte validada para relatórios e contexto. Há também um [PostgreSQL 18 com pgvector e BM25](postgres18.md) preparado para a aplicação RAG; ele ainda não recebeu esses dados. O projeto de chat **herda** o trabalho de migração: os dados precisam estar acessíveis e corretos antes de expormos tools sobre eles.
+O PostgreSQL 15 migrado contém os dados OTRS e permanece como fonte de comparação. O banco também foi copiado e validado no [PostgreSQL 18 com pgvector e BM25](postgres18.md), que será a camada de dados da aplicação RAG. Os índices de busca e os embeddings dos trechos ainda serão criados pela aplicação.
 
 ## 3. Arquitetura
 
@@ -100,7 +102,7 @@ Regra fundamental: **desenvolver em ciclos incrementais** e não avançar para o
 
 **Objetivo:** subir o modelo e o banco sem código complexo de agentes.
 
-1. Subir o PostgreSQL 18 com `pgvector` e `pg_textsearch` (BM25) via Docker; a instalação das extensões foi validada, e os dados OTRS ainda precisam ser copiados antes de consultas sobre tickets nesse banco.
+1. Subir o PostgreSQL 18 com `pgvector` e `pg_textsearch` (BM25) via Docker; as extensões e a cópia validada dos dados OTRS já estão disponíveis nesse banco.
 2. Subir o vLLM via Docker com o `Qwen/Qwen3.5-4B` (padrão; alternativas 2B/0.8B ou AWQ 4-bit ficam para validação posterior).
 3. Colocar o LiteLLM na frente do vLLM para padronizar o endpoint `/v1/chat/completions`.
 4. Conectar o Open WebUI direto no LiteLLM e validar inferência local + streaming.
