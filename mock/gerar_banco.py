@@ -29,10 +29,15 @@ _IDENTIFICADOR = re.compile(r"^[a-z_][a-z0-9_]*$")
 _DDL = """
 CREATE EXTENSION IF NOT EXISTS vector;
 CREATE EXTENSION IF NOT EXISTS pg_textsearch;
-DROP TABLE IF EXISTS article_data_mime, article, ticket, queue CASCADE;
+DROP TABLE IF EXISTS article_data_mime, article, ticket, ticket_state, queue CASCADE;
 
 CREATE TABLE queue (
     id bigint PRIMARY KEY,
+    name varchar(200) NOT NULL
+);
+
+CREATE TABLE ticket_state (
+    id integer PRIMARY KEY,
     name varchar(200) NOT NULL
 );
 
@@ -40,7 +45,8 @@ CREATE TABLE ticket (
     id bigint PRIMARY KEY,
     tn varchar(50) NOT NULL,
     title varchar(255),
-    queue_id bigint NOT NULL
+    queue_id bigint NOT NULL,
+    ticket_state_id integer NOT NULL
 );
 
 CREATE TABLE article (
@@ -103,6 +109,8 @@ def _criar_banco(credenciais: dict[str, Any], manutencao: str, banco: str, recri
 def _inserir(conexao: psycopg.Connection[Any], dados: dict[str, Any]) -> tuple[int, int]:
     filas: list[str] = dados["filas"]
     id_fila = {nome: indice + 1 for indice, nome in enumerate(filas)}
+    estados: list[str] = dados["estados"]
+    id_estado = {nome: indice + 1 for indice, nome in enumerate(estados)}
     chamados: list[dict[str, Any]] = dados["chamados"]
 
     with conexao.cursor() as cursor:
@@ -111,11 +119,23 @@ def _inserir(conexao: psycopg.Connection[Any], dados: dict[str, Any]) -> tuple[i
             "INSERT INTO queue (id, name) VALUES (%s, %s)",
             [(id_fila[nome], nome) for nome in filas],
         )
+        cursor.executemany(
+            "INSERT INTO ticket_state (id, name) VALUES (%s, %s)",
+            [(id_estado[nome], nome) for nome in estados],
+        )
         total_artigos = 0
         for ticket_id, chamado in enumerate(chamados, start=1):
+            situacao = chamado.get("situacao") or estados[(ticket_id - 1) % len(estados)]
             cursor.execute(
-                "INSERT INTO ticket (id, tn, title, queue_id) VALUES (%s, %s, %s, %s)",
-                (ticket_id, chamado["tn"], chamado["titulo"], id_fila[chamado["fila"]]),
+                "INSERT INTO ticket (id, tn, title, queue_id, ticket_state_id) "
+                "VALUES (%s, %s, %s, %s, %s)",
+                (
+                    ticket_id,
+                    chamado["tn"],
+                    chamado["titulo"],
+                    id_fila[chamado["fila"]],
+                    id_estado[situacao],
+                ),
             )
             for artigo in chamado["artigos"]:
                 total_artigos += 1

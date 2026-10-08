@@ -28,8 +28,9 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
 
-def create_app(modelo: Modelo, settings: Settings) -> FastAPI:
+def create_app(modelo: Modelo, settings: Settings, agente: Modelo | None = None) -> FastAPI:
     app = FastAPI(title="chat_ram")
+    gerador = agente or modelo
 
     @app.get("/v1/models")
     async def listar_modelos() -> dict[str, Any]:
@@ -45,12 +46,12 @@ def create_app(modelo: Modelo, settings: Settings) -> FastAPI:
 
         if req.stream:
             return StreamingResponse(
-                _eventos(modelo, mensagens, nome_modelo),
+                _eventos(gerador, mensagens, nome_modelo),
                 media_type="text/event-stream",
             )
 
         try:
-            texto = "".join([delta async for delta in modelo.stream(mensagens, nome_modelo)])
+            texto = "".join([delta async for delta in gerador.stream(mensagens, nome_modelo)])
         except Exception as exc:  # noqa: BLE001
             return JSONResponse(
                 status_code=502,

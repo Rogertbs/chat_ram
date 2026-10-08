@@ -1,6 +1,7 @@
 {
   "descricao": "Chamados fictícios de Asterisk/telecom para desenvolvimento. Nomes, e-mails e números são inventados; não há dado real.",
   "filas": ["Nivel 1", "Nivel 2", "Nivel 3"],
+  "estados": ["novo", "aberto", "fechado com sucesso", "fechado automaticamente"],
   "chamados": [
     {
       "tn": "2026011500001",

@@ -26,3 +26,13 @@ class Settings(BaseSettings):
     trecho_max_chars: int = 2000
     trecho_overlap_chars: int = 200
     processing_version: int = 1
+
+    def conexao_otrs(self) -> dict[str, object]:
+        """Argumentos de conexão psycopg para a cópia fixa do OTRS."""
+        return {
+            "host": self.postgres18_host,
+            "port": self.postgres18_port,
+            "dbname": self.postgres18_db,
+            "user": self.postgres18_user,
+            "password": self.postgres18_password,
+        }
