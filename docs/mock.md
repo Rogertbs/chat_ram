@@ -46,6 +46,23 @@ Como são só 10 chamados, não é preciso `--limite`. O relatório sai em JSON 
 
 > **Privacidade:** com o mock, nenhum ticket real é enviado a terceiros. Ao voltar para a base real, use apenas o proxy fornecido ao projeto (ver [postgres18.md](postgres18.md) e [arquitetura-0.1.md](arquitetura-0.1.md)); não aponte dados reais para provedores externos.
 
+## Subir o serviço com Docker
+
+Há um `Dockerfile` e um `docker-compose.yml` na raiz, mais um `Makefile`. A imagem instala as dependências sozinha (não é preciso instalar nada no host).
+
+```bash
+make prod   # sobe o PostgreSQL 18 + o serviço (build + up)
+make dev    # prod + banco mock + preparação, e recria o serviço
+```
+
+- `make prod` — sobe o PG18 e o serviço `chat_ram` (API na porta `8000`), conectado à rede `chat_ram_rag_data`.
+- `make dev` — ambiente de teste pronto: (re)gera o banco mock, roda a preparação e recria o serviço.
+- `make db` / `make build` / `make up` / `make mock` / `make prep` / `make down` / `make logs` / `make test` — alvos individuais (`make help` lista tudo).
+
+A API fica em `http://127.0.0.1:8000` (`/v1/models`, `/v1/chat/completions`). O container usa `POSTGRES18_HOST=postgres18`/`PORT=5432` (rede Docker) por cima do `.env`.
+
+> Os modelos `:free` do OpenRouter são **intermitentes** no tool calling: às vezes devolvem a chamada como texto. Repetir a requisição costuma resolver; com o proxy definitivo isso não deve ocorrer.
+
 ## Voltar para a base real
 
 Troque no `.env`:

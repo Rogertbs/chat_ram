@@ -1,0 +1,31 @@
+name: chat-ram-app
+
+services:
+  app:
+    build: .
+    image: chat-ram/app:latest
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      # Dentro da rede Docker, falamos com o PostgreSQL 18 pelo alias da rede.
+      POSTGRES18_HOST: postgres18
+      POSTGRES18_PORT: "5432"
+    ports:
+      - "8000:8000"
+    networks:
+      - rag_data
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models')"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+networks:
+  rag_data:
+    external: true
+    name: chat_ram_rag_data

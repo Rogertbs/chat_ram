@@ -1,0 +1,17 @@
+.venv
+.git
+.gitignore
+__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+backups
+*.sql
+*.sql.gz
+*.sql.bz2
+*.dump
+*.bak
+.env
+docs
+tests
