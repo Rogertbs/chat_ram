@@ -12,6 +12,9 @@ class Settings(BaseSettings):
     litellm_api_key: str = "sk-local"
     model_alias: str
 
+    # Chave exigida nos endpoints /v1/* (vazio = sem autenticação).
+    chat_ram_api_key: str | None = None
+
     postgres18_host: str = "127.0.0.1"
     postgres18_port: int = 5435
     postgres18_db: str = "otrs"

@@ -57,10 +57,17 @@ make dev    # prod + banco mock + preparação, e recria o serviço
 
 - `make prod` — sobe o PG18 e o serviço `chat_ram` (API na porta `8000`), conectado à rede `chat_ram_rag_data`.
 - `make dev` — ambiente de teste pronto: (re)gera o banco mock, roda a preparação e recria o serviço.
-- `make ui` — sobe a **Open WebUI** em `http://localhost:3000`, já apontada para a API (`OPENAI_API_BASE_URL=http://app:8000/v1`, `WEBUI_AUTH=false`). A primeira subida demora alguns minutos (baixa o modelo de embedding padrão); depois fica em cache.
+- `make ui` — sobe a **Open WebUI** em `http://localhost:3000`, já apontada para a API (`OPENAI_API_BASE_URL=http://app:8000/v1`). A primeira subida demora alguns minutos (baixa o modelo de embedding padrão); depois fica em cache.
 - `make db` / `make build` / `make up` / `make mock` / `make prep` / `make down` / `make logs` / `make test` — alvos individuais (`make help` lista tudo).
 
 A API fica em `http://127.0.0.1:8000` (`/v1/models`, `/v1/chat/completions`; Swagger em `/docs`) e a interface em `http://localhost:3000`. O container usa `POSTGRES18_HOST=postgres18`/`PORT=5432` (rede Docker) por cima do `.env`, e o banco continua sendo o `otrs_mock`.
+
+### Autenticação
+
+- **Backend**: os endpoints `/v1/*` exigem `Authorization: Bearer $CHAT_RAM_API_KEY` (chave no `.env`); sem chave configurada, ficam abertos. `/health` é sempre aberto (usado pelo healthcheck). A porta `8000` é publicada apenas em `127.0.0.1`; a Open WebUI acessa a API pela rede interna.
+- **Open WebUI**: login habilitado; o admin é criado no primeiro boot a partir de `WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD` (no `.env`), com **signup desabilitado**. Use essas credenciais para entrar. A Open WebUI chama o backend com a mesma `CHAT_RAM_API_KEY`.
+- Para produção, sirva a UI por **HTTPS** (proxy reverso com TLS) e restrinja a porta `3000` no firewall/security group. Com HTTPS, ative também `WEBUI_AUTH_COOKIE_SECURE=true` e `WEBUI_AUTH_COOKIE_SAME_SITE=strict`.
+- Trocar a senha do admin: ajuste `WEBUI_ADMIN_PASSWORD` no `.env` (vale só enquanto não houver usuários) ou altere pelo painel da Open WebUI.
 
 > A Open WebUI reenvia o histórico da conversa a cada mensagem. Como ela não envia um id de conversa, o backend usa esse histórico reenviado (a retomada por `thread_id` da issue 04 só vale quando há um id de conversa, o que exige uma extensão da UI).
 

@@ -25,7 +25,12 @@ class ModeloFake:
 
 
 def _app(modelo: ModeloFake) -> FastAPI:
-    cfg = Settings(litellm_base_url="http://proxy", litellm_api_key="sk", model_alias="alvo")
+    cfg = Settings(
+        litellm_base_url="http://proxy",
+        litellm_api_key="sk",
+        model_alias="alvo",
+        chat_ram_api_key=None,
+    )
     return create_app(modelo, cfg)
 
 
@@ -98,7 +103,12 @@ class ConversaFake:
 
 
 async def test_encaminha_o_identificador_de_conversa() -> None:
-    cfg = Settings(litellm_base_url="http://proxy", litellm_api_key="sk", model_alias="alvo")
+    cfg = Settings(
+        litellm_base_url="http://proxy",
+        litellm_api_key="sk",
+        model_alias="alvo",
+        chat_ram_api_key=None,
+    )
     conversa = ConversaFake()
     app = create_app(ModeloFake([]), cfg, None, conversa)  # type: ignore[arg-type]
     transport = ASGITransport(app=app)
@@ -112,3 +122,28 @@ async def test_encaminha_o_identificador_de_conversa() -> None:
     assert resposta.status_code == 200
     assert resposta.headers["x-conversation-id"] == "chat-9"
     assert conversa.chamadas == [("chat-9", "req-9")]
+
+
+async def test_exige_api_key_quando_configurada() -> None:
+    cfg = Settings(
+        litellm_base_url="http://proxy",
+        litellm_api_key="sk",
+        model_alias="alvo",
+        chat_ram_api_key="segredo",
+    )
+    app = create_app(ModeloFake(["ok"]), cfg)
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://teste") as client:
+        sem_chave = await client.post("/v1/chat/completions", json=PEDIDO)
+        chave_errada = await client.post(
+            "/v1/chat/completions", json=PEDIDO, headers={"authorization": "Bearer errada"}
+        )
+        chave_certa = await client.post(
+            "/v1/chat/completions", json=PEDIDO, headers={"authorization": "Bearer segredo"}
+        )
+        saude = await client.get("/health")
+
+    assert sem_chave.status_code == 401
+    assert chave_errada.status_code == 401
+    assert chave_certa.status_code == 200
+    assert saude.status_code == 200

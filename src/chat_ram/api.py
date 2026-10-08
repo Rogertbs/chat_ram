@@ -1,5 +1,6 @@
 """Endpoint HTTP OpenAI-compatible para a Open WebUI."""
 
+import hmac
 import json
 import logging
 import time
@@ -7,7 +8,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -37,14 +38,28 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(title="chat_ram")
 
-    @app.get("/v1/models")
+    def verificar_api_key(request: Request) -> None:
+        """Exige `Authorization: Bearer <chave>` quando uma chave está configurada."""
+        if not settings.chat_ram_api_key:
+            return
+        cabecalho = request.headers.get("authorization", "")
+        if not hmac.compare_digest(
+            cabecalho.encode(), f"Bearer {settings.chat_ram_api_key}".encode()
+        ):
+            raise HTTPException(status_code=401, detail="chave de API ausente ou inválida")
+
+    @app.get("/health")
+    async def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/v1/models", dependencies=[Depends(verificar_api_key)])
     async def listar_modelos() -> dict[str, Any]:
         return {
             "object": "list",
             "data": [{"id": settings.model_alias, "object": "model", "owned_by": "chat_ram"}],
         }
 
-    @app.post("/v1/chat/completions")
+    @app.post("/v1/chat/completions", dependencies=[Depends(verificar_api_key)])
     async def completions(req: ChatRequest, request: Request) -> Any:
         nome_modelo = req.model or settings.model_alias
         mensagens = [m.model_dump() for m in req.messages]

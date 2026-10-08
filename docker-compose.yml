@@ -11,7 +11,7 @@ services:
       POSTGRES18_HOST: postgres18
       POSTGRES18_PORT: "5432"
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     networks:
       - rag_data
     healthcheck:
@@ -19,7 +19,7 @@ services:
         - CMD
         - python
         - -c
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/models')"
+        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"
       interval: 10s
       timeout: 5s
       retries: 12
@@ -31,10 +31,16 @@ services:
     restart: unless-stopped
     environment:
       OPENAI_API_BASE_URL: http://app:8000/v1
-      OPENAI_API_KEY: sk-chat-ram
+      OPENAI_API_KEY: ${CHAT_RAM_API_KEY:-sk-chat-ram}
       ENABLE_OPENAI_API: "true"
-      WEBUI_AUTH: "false"
-      WEBUI_SECRET_KEY: chat-ram-dev
+      # Autenticação: admin criado no primeiro boot; signup desabilitado.
+      WEBUI_AUTH: "true"
+      WEBUI_SECRET_KEY: ${WEBUI_SECRET_KEY:?defina WEBUI_SECRET_KEY no .env}
+      WEBUI_ADMIN_EMAIL: ${WEBUI_ADMIN_EMAIL:?defina WEBUI_ADMIN_EMAIL no .env}
+      WEBUI_ADMIN_PASSWORD: ${WEBUI_ADMIN_PASSWORD:?defina WEBUI_ADMIN_PASSWORD no .env}
+      WEBUI_ADMIN_NAME: ${WEBUI_ADMIN_NAME:-Admin}
+      ENABLE_SIGNUP: "false"
+      ENABLE_PASSWORD_VALIDATION: "true"
     ports:
       - "3000:8080"
     volumes:
