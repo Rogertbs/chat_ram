@@ -84,3 +84,31 @@ async def test_lista_modelos() -> None:
 
     assert resposta.status_code == 200
     assert resposta.json()["data"][0]["id"] == "alvo"
+
+
+class ConversaFake:
+    def __init__(self) -> None:
+        self.chamadas: list[tuple[str, str]] = []
+
+    async def stream(
+        self, chat_id: str, request_id: str, mensagens: list[dict[str, str]]
+    ) -> AsyncIterator[str]:
+        self.chamadas.append((chat_id, request_id))
+        yield "ok"
+
+
+async def test_encaminha_o_identificador_de_conversa() -> None:
+    cfg = Settings(litellm_base_url="http://proxy", litellm_api_key="sk", model_alias="alvo")
+    conversa = ConversaFake()
+    app = create_app(ModeloFake([]), cfg, None, conversa)  # type: ignore[arg-type]
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://teste") as client:
+        resposta = await client.post(
+            "/v1/chat/completions",
+            json=PEDIDO,
+            headers={"x-conversation-id": "chat-9", "x-request-id": "req-9"},
+        )
+
+    assert resposta.status_code == 200
+    assert resposta.headers["x-conversation-id"] == "chat-9"
+    assert conversa.chamadas == [("chat-9", "req-9")]

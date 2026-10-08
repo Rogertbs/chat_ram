@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     postgres18_password: str = ""
 
     rag_schema: str = "rag"
+    conversa_schema: str = "conversa"
     embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
     embedding_dimension: int = 1024
     embedding_truncate_to: int | None = None

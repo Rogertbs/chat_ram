@@ -7,11 +7,12 @@ from collections.abc import AsyncIterator
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .config import Settings
+from .conversa import Conversa
 from .modelo import Modelo
 
 _logger = logging.getLogger(__name__)
@@ -28,9 +29,13 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
 
-def create_app(modelo: Modelo, settings: Settings, agente: Modelo | None = None) -> FastAPI:
+def create_app(
+    modelo: Modelo,
+    settings: Settings,
+    agente: Modelo | None = None,
+    conversa: Conversa | None = None,
+) -> FastAPI:
     app = FastAPI(title="chat_ram")
-    gerador = agente or modelo
 
     @app.get("/v1/models")
     async def listar_modelos() -> dict[str, Any]:
@@ -40,18 +45,27 @@ def create_app(modelo: Modelo, settings: Settings, agente: Modelo | None = None)
         }
 
     @app.post("/v1/chat/completions")
-    async def completions(req: ChatRequest) -> Any:
+    async def completions(req: ChatRequest, request: Request) -> Any:
         nome_modelo = req.model or settings.model_alias
         mensagens = [m.model_dump() for m in req.messages]
+        chat_id = request.headers.get("x-conversation-id") or uuid4().hex
+        request_id = request.headers.get("x-request-id") or uuid4().hex
+        cabecalhos = {"x-conversation-id": chat_id}
+
+        if conversa is not None:
+            deltas = conversa.stream(chat_id, request_id, mensagens)
+        else:
+            deltas = (agente or modelo).stream(mensagens, nome_modelo)
 
         if req.stream:
             return StreamingResponse(
-                _eventos(gerador, mensagens, nome_modelo),
+                _eventos(deltas, nome_modelo),
                 media_type="text/event-stream",
+                headers=cabecalhos,
             )
 
         try:
-            texto = "".join([delta async for delta in gerador.stream(mensagens, nome_modelo)])
+            texto = "".join([delta async for delta in deltas])
         except Exception as exc:  # noqa: BLE001
             return JSONResponse(
                 status_code=502,
@@ -62,19 +76,17 @@ def create_app(modelo: Modelo, settings: Settings, agente: Modelo | None = None)
                     }
                 },
             )
-        return _resposta_completa(nome_modelo, texto)
+        return JSONResponse(content=_resposta_completa(nome_modelo, texto), headers=cabecalhos)
 
     return app
 
 
-async def _eventos(
-    modelo: Modelo, mensagens: list[dict[str, str]], nome_modelo: str
-) -> AsyncIterator[str]:
+async def _eventos(deltas: AsyncIterator[str], nome_modelo: str) -> AsyncIterator[str]:
     id_ = f"chatcmpl-{uuid4().hex}"
     criado = int(time.time())
     yield _sse(_chunk(id_, criado, nome_modelo, delta={"role": "assistant", "content": ""}))
     try:
-        async for delta in modelo.stream(mensagens, nome_modelo):
+        async for delta in deltas:
             yield _sse(_chunk(id_, criado, nome_modelo, delta={"content": delta}))
     except Exception as exc:  # noqa: BLE001
         _logger.exception("falha no stream do proxy")

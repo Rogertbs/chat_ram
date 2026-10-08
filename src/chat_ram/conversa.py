@@ -8,6 +8,7 @@ from typing import Any
 from .conhecimento.consulta import FonteTickets, consultar_ticket
 from .conhecimento.serializacao import para_dicionario
 from .modelo import EventoTexto, ModeloFerramentas
+from .persistencia.repositorio import RepositorioConversas
 
 ESQUEMA_CONSULTAR_TICKET: dict[str, Any] = {
     "type": "function",
@@ -72,7 +73,12 @@ class Agente:
     def esquemas(self) -> list[dict[str, Any]]:
         return [ferramenta.esquema for ferramenta in self._ferramentas]
 
-    async def stream(self, mensagens: list[dict[str, Any]], modelo: str) -> AsyncIterator[str]:
+    async def stream(
+        self,
+        mensagens: list[dict[str, Any]],
+        modelo: str,
+        ao_ferramenta: Callable[[dict[str, Any]], None] | None = None,
+    ) -> AsyncIterator[str]:
         """Produz os deltas da resposta, executando ferramentas se o modelo pedir."""
         conversa = list(mensagens)
         chamadas: list[dict[str, Any]] = []
@@ -86,7 +92,10 @@ class Agente:
 
         conversa.append({"role": "assistant", "content": "", "tool_calls": chamadas})
         for chamada in chamadas:
-            saida = await self._compactar(self._executar(chamada), modelo)
+            saida = self._executar(chamada)
+            if ao_ferramenta is not None:
+                ao_ferramenta(saida)
+            saida = await self._compactar(saida, modelo)
             conversa.append(
                 {
                     "role": "tool",
@@ -169,3 +178,51 @@ def _argumentos(texto: object) -> dict[str, Any]:
     except json.JSONDecodeError:
         return {}
     return dados if isinstance(dados, dict) else {}
+
+
+class Conversa:
+    """Persiste mensagens e estado por thread_id e responde com o agente."""
+
+    def __init__(
+        self,
+        agente: Agente,
+        conversas: RepositorioConversas,
+        nome_modelo: str,
+    ) -> None:
+        self._agente = agente
+        self._conversas = conversas
+        self._nome_modelo = nome_modelo
+
+    async def stream(
+        self, chat_id: str, request_id: str, mensagens: list[dict[str, Any]]
+    ) -> AsyncIterator[str]:
+        """Responde à nova mensagem, restaurando o histórico persistido do chat."""
+        thread_id = self._conversas.resolver_thread(chat_id)
+        historico = self._conversas.carregar_mensagens(thread_id)
+        nova = _ultima_mensagem(mensagens)
+        self._conversas.salvar_mensagem(thread_id, request_id, "user", str(nova["content"]))
+
+        ticket_em_foco: list[str] = []
+
+        def ao_ferramenta(saida: dict[str, Any]) -> None:
+            ticket = saida.get("ticket")
+            if saida.get("status") == "encontrado" and ticket:
+                ticket_em_foco.append(str(ticket["tn"]))
+
+        pedacos: list[str] = []
+        entrada = [*historico, nova]
+        async for delta in self._agente.stream(entrada, self._nome_modelo, ao_ferramenta):
+            pedacos.append(delta)
+            yield delta
+        self._conversas.salvar_mensagem(thread_id, request_id, "assistant", "".join(pedacos))
+        if ticket_em_foco:
+            estado = self._conversas.carregar_estado(thread_id)
+            estado.ticket_em_foco = ticket_em_foco[-1]
+            self._conversas.salvar_estado(thread_id, estado)
+
+
+def _ultima_mensagem(mensagens: list[dict[str, Any]]) -> dict[str, Any]:
+    for mensagem in reversed(mensagens):
+        if mensagem.get("role") == "user":
+            return {"role": "user", "content": mensagem.get("content", "")}
+    return {"role": "user", "content": mensagens[-1].get("content", "") if mensagens else ""}
