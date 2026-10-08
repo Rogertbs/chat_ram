@@ -29,9 +29,12 @@ LITELLM_BASE_URL=https://openrouter.ai/api/v1
 LITELLM_API_KEY=sk-or-v1-...
 MODEL_ALIAS=nvidia/nemotron-3-super-120b-a12b:free
 EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free
-EMBEDDING_DIMENSION=2048
+EMBEDDING_DIMENSION=1024
+EMBEDDING_DIMENSIONS=1024
 EMBEDDING_BATCH=16
 ```
+
+O Nemotron free é nativo em 2048; `EMBEDDING_DIMENSIONS=1024` pede o truncamento MRL no servidor, mantendo o schema `vector(1024)` do ADR-0001. Se preferir não truncar, use `EMBEDDING_DIMENSION=2048` e remova `EMBEDDING_DIMENSIONS`.
 
 Rode a Preparação:
 

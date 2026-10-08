@@ -46,6 +46,7 @@ def main(argv: list[str] | None = None) -> int:
                 modelo=settings.embedding_model,
                 dimensao=settings.embedding_dimension,
                 lote=settings.embedding_batch,
+                dimensions=settings.embedding_dimensions,
             ),
             PostgresTrechos(conexao_escrita, schema=settings.rag_schema),
             config,

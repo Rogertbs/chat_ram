@@ -24,6 +24,7 @@ class LiteLLMEmbeddings:
         dimensao: int,
         lote: int = 64,
         timeout: float = 120.0,
+        dimensions: int | None = None,
     ) -> None:
         self._url = f"{base_url.rstrip('/')}/v1/embeddings"
         self._api_key = api_key
@@ -31,6 +32,7 @@ class LiteLLMEmbeddings:
         self._dimensao = dimensao
         self._lote = lote
         self._timeout = timeout
+        self._dimensions = dimensions
 
     def embed(self, textos: list[str]) -> list[list[float]]:
         resultado: list[list[float]] = []
@@ -41,9 +43,12 @@ class LiteLLMEmbeddings:
         return resultado
 
     def _embed_lote(self, cliente: httpx.Client, textos: list[str]) -> list[list[float]]:
+        payload: dict[str, object] = {"model": self._modelo, "input": textos}
+        if self._dimensions is not None:
+            payload["dimensions"] = self._dimensions
         resposta = cliente.post(
             self._url,
-            json={"model": self._modelo, "input": textos},
+            json=payload,
             headers={"Authorization": f"Bearer {self._api_key}"},
         )
         resposta.raise_for_status()

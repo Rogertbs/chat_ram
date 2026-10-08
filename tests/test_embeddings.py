@@ -41,6 +41,30 @@ def test_envia_modelo_e_textos_no_payload() -> None:
     assert corpo["input"] == ["olá"]
 
 
+def test_omite_dimensions_por_padrao() -> None:
+    embeddings = LiteLLMEmbeddings("http://proxy", "sk", modelo="emb", dimensao=3)
+
+    with respx.mock(base_url="http://proxy") as mock:
+        rota = mock.post("/v1/embeddings").mock(return_value=_resposta([1.0, 2.0, 3.0]))
+        embeddings.embed(["olá"])
+        corpo = httpx.Response(200, content=rota.calls[0].request.content).json()
+
+    assert "dimensions" not in corpo
+
+
+def test_envia_dimensions_quando_configurado() -> None:
+    embeddings = LiteLLMEmbeddings(
+        "http://proxy", "sk", modelo="emb", dimensao=1024, dimensions=1024
+    )
+
+    with respx.mock(base_url="http://proxy") as mock:
+        rota = mock.post("/v1/embeddings").mock(return_value=_resposta([1.0] * 1024))
+        embeddings.embed(["olá"])
+        corpo = httpx.Response(200, content=rota.calls[0].request.content).json()
+
+    assert corpo["dimensions"] == 1024
+
+
 def test_respeita_o_tamanho_do_lote() -> None:
     embeddings = LiteLLMEmbeddings("http://proxy", "sk", modelo="emb", dimensao=1, lote=2)
 
