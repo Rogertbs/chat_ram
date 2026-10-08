@@ -18,6 +18,26 @@ A senha do novo banco está em `POSTGRES18_PASSWORD` no `.env` local (permissão
 
 O volume do PostgreSQL 18 é montado em `/var/lib/postgresql`, conforme o layout novo da imagem oficial. O script `postgres18/init/001-extensions.sql` cria as extensões somente quando o volume é inicializado pela primeira vez. O servidor inicia com `shared_preload_libraries=pg_textsearch`, exigido pela extensão BM25.
 
+## Acesso externo (DBeaver)
+
+Por padrão o PostgreSQL 18 publica a porta apenas em localhost (`127.0.0.1:5435`). Para conectar de outra máquina, o `postgres18/docker-compose.yml` publica `5435:5432` (todas as interfaces) e o `pg_hba.conf` aceita **somente o usuário `otrs`, com senha**; qualquer outro usuário ou origem é recusado. Aplique ou reaplique a restrição no container em execução:
+
+```bash
+postgres18/restrict-hba.sh
+```
+
+Conexões:
+- Banco real (cópia OTRS): host `<IP-do-servidor>`, porta `5435`, banco `otrs`
+- Banco mock: mesma porta, banco `otrs_mock`
+- Usuário `otrs`; senha em `POSTGRES18_PASSWORD` no `.env`.
+
+Recomenda-se **túnel SSH** em vez de expor a porta publicamente. Se expuser:
+- Libere a porta 5435 apenas no firewall/security group necessário.
+- O `otrs` é superusuário e a senha é a única barreira; rotacione-a se vazar.
+- O Docker pode ignorar o `ufw` do host (regras na cadeia DOCKER); restrinja no security group do provedor.
+
+Para voltar a só localhost, troque `ports` para `"127.0.0.1:5435:5432"` no compose e rode `docker compose --env-file .env -f postgres18/docker-compose.yml up -d`.
+
 ## Como as buscas se complementam
 
 `pgvector` faz busca por proximidade entre embeddings; ela encontra trechos semanticamente parecidos mesmo quando usam palavras diferentes. `pg_textsearch` faz busca lexical com ranking BM25; ela ajuda quando a pergunta contém número de chamado, nome exato, código ou termo específico. A tool de RAG pode consultar os dois índices de uma tabela de trechos e combinar os resultados antes de entregar contexto ao modelo.

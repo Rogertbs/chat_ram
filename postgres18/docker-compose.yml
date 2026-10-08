@@ -24,7 +24,7 @@ services:
       - maintenance_work_mem=256MB
     shm_size: 512mb
     ports:
-      - "127.0.0.1:5435:5432"
+      - "5435:5432"
     volumes:
       - postgres18_data:/var/lib/postgresql
       - ./init/001-extensions.sql:/docker-entrypoint-initdb.d/001-extensions.sql:ro
