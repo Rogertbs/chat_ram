@@ -195,3 +195,20 @@ async def test_consulta_com_numero_nao_injeta_o_foco() -> None:
 
     sistema = " ".join(m["content"] for m in agente.recebidas[0] if m["role"] == "system")
     assert "Corpo do ticket" not in sistema
+
+
+async def test_usa_historico_da_ui_quando_nao_ha_persistido() -> None:
+    repo = RepoFake()
+    agente = AgenteFake()
+    conversa = Conversa(agente, repo, "m")  # type: ignore[arg-type]
+    mensagens = [
+        {"role": "user", "content": "oi"},
+        {"role": "assistant", "content": "olá"},
+        {"role": "user", "content": "e agora?"},
+    ]
+
+    async for _ in conversa.stream("chat1", "r1", mensagens):
+        pass
+
+    recebidas = [m for m in agente.recebidas[0] if m["role"] != "system"]
+    assert [m["content"] for m in recebidas] == ["oi", "olá", "e agora?"]

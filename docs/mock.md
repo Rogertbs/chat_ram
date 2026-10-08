@@ -57,9 +57,12 @@ make dev    # prod + banco mock + preparação, e recria o serviço
 
 - `make prod` — sobe o PG18 e o serviço `chat_ram` (API na porta `8000`), conectado à rede `chat_ram_rag_data`.
 - `make dev` — ambiente de teste pronto: (re)gera o banco mock, roda a preparação e recria o serviço.
+- `make ui` — sobe a **Open WebUI** em `http://localhost:3000`, já apontada para a API (`OPENAI_API_BASE_URL=http://app:8000/v1`, `WEBUI_AUTH=false`). A primeira subida demora alguns minutos (baixa o modelo de embedding padrão); depois fica em cache.
 - `make db` / `make build` / `make up` / `make mock` / `make prep` / `make down` / `make logs` / `make test` — alvos individuais (`make help` lista tudo).
 
-A API fica em `http://127.0.0.1:8000` (`/v1/models`, `/v1/chat/completions`). O container usa `POSTGRES18_HOST=postgres18`/`PORT=5432` (rede Docker) por cima do `.env`.
+A API fica em `http://127.0.0.1:8000` (`/v1/models`, `/v1/chat/completions`; Swagger em `/docs`) e a interface em `http://localhost:3000`. O container usa `POSTGRES18_HOST=postgres18`/`PORT=5432` (rede Docker) por cima do `.env`, e o banco continua sendo o `otrs_mock`.
+
+> A Open WebUI reenvia o histórico da conversa a cada mensagem. Como ela não envia um id de conversa, o backend usa esse histórico reenviado (a retomada por `thread_id` da issue 04 só vale quando há um id de conversa, o que exige uma extensão da UI).
 
 > Os modelos `:free` do OpenRouter são **intermitentes** no tool calling: às vezes devolvem a chamada como texto. Repetir a requisição costuma resolver; com o proxy definitivo isso não deve ocorrer.
 

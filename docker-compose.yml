@@ -25,6 +25,29 @@ services:
       retries: 12
       start_period: 20s
 
+  openwebui:
+    image: ghcr.io/open-webui/open-webui:main
+    profiles: ["ui"]
+    restart: unless-stopped
+    environment:
+      OPENAI_API_BASE_URL: http://app:8000/v1
+      OPENAI_API_KEY: sk-chat-ram
+      ENABLE_OPENAI_API: "true"
+      WEBUI_AUTH: "false"
+      WEBUI_SECRET_KEY: chat-ram-dev
+    ports:
+      - "3000:8080"
+    volumes:
+      - openwebui_data:/app/backend/data
+    networks:
+      - rag_data
+    depends_on:
+      app:
+        condition: service_healthy
+
+volumes:
+  openwebui_data:
+
 networks:
   rag_data:
     external: true

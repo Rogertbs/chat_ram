@@ -336,9 +336,15 @@ class Conversa:
             foco = _contexto_ticket(self._fonte_tickets, estado.ticket_em_foco)
             if foco is not None:
                 entrada.append(foco)
-        entrada.extend(historico)
-        if nova_inserida:
-            entrada.append(nova)
+        if historico:
+            # Backend é a origem autoritativa quando a conversa é conhecida.
+            entrada.extend(historico)
+            if nova_inserida:
+                entrada.append(nova)
+        else:
+            # Sem histórico persistido (ex.: Open WebUI sem id de conversa), usa o
+            # histórico que a própria interface reenviou.
+            entrada.extend(mensagens)
 
         contexto: dict[str, Any] = {
             "fila_selecionada": estado.fila_selecionada,
