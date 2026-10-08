@@ -1,0 +1,184 @@
+{
+  "descricao": "Chamados fictícios de Asterisk/telecom para desenvolvimento. Nomes, e-mails e números são inventados; não há dado real.",
+  "filas": ["Nivel 1", "Nivel 2", "Nivel 3"],
+  "chamados": [
+    {
+      "tn": "2026011500001",
+      "titulo": "Ramal 4021 não registra no Asterisk",
+      "fila": "Nivel 1",
+      "artigos": [
+        {
+          "assunto": "Ramal 4021 não registra no Asterisk",
+          "corpo": "Bom dia, o ramal 4021 do setor comercial parou de registrar no Asterisk hoje pela manhã. O softphone mostra \"Registration Failed\". O cabo de rede foi testado e o computador navega normalmente. Já reiniciamos o telefone e o ramal continua sem registrar. Pode verificar?",
+          "visivel_cliente": true,
+          "data": "2026-01-15T09:12:00+00:00"
+        },
+        {
+          "assunto": "Nota interna - diagnóstico ramal 4021",
+          "corpo": "Verificado no Asterisk: peer 4021 UNREACHABLE. Ao testar com 'sip show peer 4021', o IP de contato está diferente do esperado. O firewall novo do setor estava com SIP ALG habilitado, reescrevendo o SDP. Solução: desabilitar SIP ALG e reiniciar o peer com 'sip reload'. Ramal voltou a registrar.",
+          "visivel_cliente": false,
+          "data": "2026-01-15T11:40:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011500002",
+      "titulo": "Chamada externa cai após 30 segundos",
+      "fila": "Nivel 1",
+      "artigos": [
+        {
+          "assunto": "Chamada externa cai após 30 segundos",
+          "corpo": "As ligações para números externos estão caindo exatamente após 30 segundos, mas a ligação entre ramais internos funciona bem. O problema começou depois de uma manutenção no roteador. Precisamos de ajuda com urgência.",
+          "visivel_cliente": true,
+          "data": "2026-01-15T13:05:00+00:00"
+        },
+        {
+          "assunto": "Resolvido - timeout de sessão SIP",
+          "corpo": "Causa: o roteador estava bloqueando o reenvio de ACK e o BYE não chegava ao tronco, então o Asterisk derrubava a sessão por 'rtptimeout'. Ajustamos 'session-timers=refuse' no peer do tronco e alinhamos o 'rtptimeout=60' com o operador. As chamadas externas ficaram estáveis.",
+          "visivel_cliente": true,
+          "data": "2026-01-15T15:22:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011600003",
+      "titulo": "URA não reconhece DTMF no menu",
+      "fila": "Nivel 1",
+      "artigos": [
+        {
+          "assunto": "URA não reconhece DTMF no menu",
+          "corpo": "A URA principal não reconhece as teclas digitadas pelos clientes. O áudio do menu toca normalmente, mas ao pressionar 1 ou 2 nada acontece e a chamada cai. Testamos de vários celulares e o comportamento é o mesmo. Suspeitamos de codec ou de RFC 2833. Poderiam verificar a configuração do menu?",
+          "visivel_cliente": true,
+          "data": "2026-01-16T08:47:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011600004",
+      "titulo": "Tronco SIP sem áudio em uma direção",
+      "fila": "Nivel 2",
+      "artigos": [
+        {
+          "assunto": "Tronco SIP sem áudio em uma direção",
+          "corpo": "No tronco SIP novo, o cliente escuta o atendente, mas o atendente não escuta o cliente. Acontece só nas chamadas de entrada pelo tronco. Chamadas internas e saída pelo tronco antigo funcionam.",
+          "visivel_cliente": true,
+          "data": "2026-01-16T10:30:00+00:00"
+        },
+        {
+          "assunto": "Tentativa - troca de codec",
+          "corpo": "Testamos forçar apenas G.729 no tronco, mas o áudio continuou em uma direção. O SDP negociado mostra o IP privado do servidor de mídia, o que sugere problema de NAT no perfil do tronco.",
+          "visivel_cliente": false,
+          "data": "2026-01-16T12:15:00+00:00"
+        },
+        {
+          "assunto": "Resolvido - NAT e codec",
+          "corpo": "Corrigimos com 'nat=force_rport,comedia' no peer do tronco e 'externip' apontando para o IP público. Também padronizamos o codec em G.711 alaw, que o operador suporta sem transcodificação. Áudio bidirecional confirmado em cinco chamadas de teste.",
+          "visivel_cliente": true,
+          "data": "2026-01-16T14:50:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011700005",
+      "titulo": "Eco nas chamadas externas",
+      "fila": "Nivel 2",
+      "artigos": [
+        {
+          "assunto": "Eco nas chamadas externas",
+          "corpo": "Relato detalhado de eco nas chamadas externas. O atendente relata que o próprio áudio volta com atraso perceptível, formando um eco incômodo que atrapalha o entendimento com o cliente. O fenômeno acontece com maior intensidade quando o volume do headset está acima da metade e quando o ambiente do operador tem paredes lisas, mas também ocorre, de forma mais discreta, em salas tratadas acusticamente. Não há relação aparente com um ramal específico: testamos os ramais 4001, 4002 e 4010, todos no mesmo switch, e o comportamento se repete. As chamadas internas, de ramal para ramal, não apresentam eco, o que direciona a investigação para a cadeia de mídia do tronco externo e para o tratamento de ganho aplicado na saída analógica do headset.\n\nPrimeira hipótese: diferença de ganho entre transmissão e recepção no perfil do canal. Verificamos os valores de 'rxgain' e 'txgain' e ambos estavam neutros (0.0).\n\nSegunda hipótese: echo canceller do operador desligado ou com cauda curta. Solicitamos ao operador a confirmação de que o cancelador de eco está ativo no tronco e recebemos a informação de que a configuração é padronizada, com cauda de 64 ms.\n\nTerceira hipótese: problema no headset ou no adaptador USB. Trocamos o headset do ramal 4001 por um modelo equivalente e o eco persistiu, o que praticamente descarta o dispositivo.\n\nQuarta hipótese: acoplamento acústico no próprio gabinete do operador, com retorno pelo microfone. Fizemos um teste com o operador em outra sala, isolada, e o eco diminuiu, mas não desapareceu, o que sugere que há mais de uma causa atuando ao mesmo tempo.\n\nQuinta hipótese: latência de jitter buffer mal dimensionada no softphone, provocando reflexão de áudio. Aumentamos o jitter buffer de 20 ms para 60 ms e o eco ficou menos evidente, porém ainda audível em conversas longas.\n\nSexta hipótese: ausência de supressão de eco no gateway analógico que atende os aparelhos antigos do setor. Esse é o ponto que consideramos mais provável, porque os ramais afetados passam pelo gateway FXS antes de entrar no Asterisk. Vamos abrir um teste controlado com um dos ramais ligado diretamente a um telefone IP, sem o gateway, para isolar a variável. Se o eco desaparecer nesse cenário, confirmamos a causa e partimos para ajuste de ganho no gateway ou substituição do equipamento.",
+          "visivel_cliente": true,
+          "data": "2026-01-17T09:20:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011700006",
+      "titulo": "Transferência de chamada falha entre filas",
+      "fila": "Nivel 2",
+      "artigos": [
+        {
+          "assunto": "Transferência de chamada falha entre filas",
+          "corpo": "<html><body><p>Boa tarde,</p><p>A transferência de chamadas entre a fila de <b>Atendimento</b> e a fila de <b>Suporte</b> está falhando.</p><p>Ao pressionar <i>Transferir</i>, a chamada retorna para o atendente original com um bipe curto.</p><p>Favor verificar.</p></body></html>",
+          "visivel_cliente": true,
+          "data": "2026-01-17T11:00:00+00:00"
+        },
+        {
+          "assunto": "Nota interna - transferência entre filas",
+          "corpo": "O atendente não tinha permissão de transferir para a fila de destino; o contexto do dialplan não incluía o 'Goto' para a fila Suporte. Ajustamos as permissões do grupo e incluímos a rota de transferência. Testado com sucesso.",
+          "visivel_cliente": false,
+          "data": "2026-01-17T13:35:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011800007",
+      "titulo": "Fila de atendimento não toca nos ramais",
+      "fila": "Nivel 3",
+      "artigos": [
+        {
+          "assunto": "Fila de atendimento não toca nos ramais",
+          "corpo": "A fila 5000 não está tocando nos ramais 4101 e 4102. O cliente fica em espera ouvindo a música, mas os agentes não recebem a chamada. Os agentes estão com o status disponível no painel.",
+          "visivel_cliente": true,
+          "data": "2026-01-18T08:15:00+00:00"
+        },
+        {
+          "assunto": "Resolvido - membros estáticos da fila",
+          "corpo": "Os ramais tinham sido removidos da fila após a última alteração de turno. Reinserimos os membros com 'queue add member SIP/4101' e 'queue add member SIP/4102' na fila 5000 e confirmamos o funcionamento com uma chamada de teste.",
+          "visivel_cliente": true,
+          "data": "2026-01-18T10:05:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011800008",
+      "titulo": "Correio de voz não envia e-mail",
+      "fila": "Nivel 3",
+      "artigos": [
+        {
+          "assunto": "Correio de voz não envia e-mail",
+          "corpo": "As mensagens deixadas no correio de voz não chegam mais por e-mail. O recado fica gravado no sistema, mas o e-mail de notificação não é enviado. O servidor de e-mail SMTP foi alterado recentemente e acreditamos que seja a causa. Precisamos reativar as notificações.",
+          "visivel_cliente": true,
+          "data": "2026-01-18T14:40:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011900009",
+      "titulo": "Softphone não registra após atualização",
+      "fila": "Nivel 3",
+      "artigos": [
+        {
+          "assunto": "Softphone não registra após atualização",
+          "corpo": "Depois de atualizar o softphone para a versão mais recente, o aplicativo não registra mais no Asterisk. Aparece a mensagem '401 Unauthorized'. O usuário e a senha não mudaram. Ocorre em três máquinas do mesmo setor.",
+          "visivel_cliente": true,
+          "data": "2026-01-19T09:50:00+00:00"
+        },
+        {
+          "assunto": "Nota interna - TLS no softphone",
+          "corpo": "A nova versão do softphone passou a exigir TLS no transporte por padrão. O peer estava configurado como 'transport=udp'. Ajustamos para 'transport=udp,tcp,tls' e orientamos os usuários a marcar a opção de transporte UDP no aplicativo. Registro voltou a funcionar nas três máquinas.",
+          "visivel_cliente": false,
+          "data": "2026-01-19T11:30:00+00:00"
+        }
+      ]
+    },
+    {
+      "tn": "2026011900010",
+      "titulo": "Registro de tronco E1 com erro",
+      "fila": "Nivel 1",
+      "artigos": [
+        {
+          "assunto": "",
+          "corpo": "",
+          "visivel_cliente": false,
+          "data": "2026-01-19T12:00:00+00:00"
+        },
+        {
+          "assunto": "Registro de tronco E1 com erro",
+          "corpo": "O tronco E1 está apresentando erro de sincronismo e algumas chamadas não completam. O LED de alarme do gateway acende de forma intermitente. Precisamos de uma verificação no equipamento e na operadora.",
+          "visivel_cliente": true,
+          "data": "2026-01-19T12:05:00+00:00"
+        }
+      ]
+    }
+  ]
+}
