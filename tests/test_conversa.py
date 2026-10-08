@@ -133,3 +133,5 @@ async def test_ticket_extenso_e_resumido_por_blocos() -> None:
     mensagem_tool = next(m for m in final if m["role"] == "tool")
     assert '"cobertura_parcial": true' in mensagem_tool["content"]
     assert '"total_blocos": 2' in mensagem_tool["content"]
+    assert '"fontes"' in mensagem_tool["content"]
+    assert '"article_id": 1' in mensagem_tool["content"]

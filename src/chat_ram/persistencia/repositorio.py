@@ -19,8 +19,14 @@ class RepositorioConversas(Protocol):
         """Mensagens persistidas, em ordem."""
         ...
 
-    def salvar_mensagem(self, thread_id: str, request_id: str, papel: str, conteudo: str) -> None:
-        """Grava uma mensagem sem duplicar em retentativas da mesma requisição."""
+    def salvar_mensagem(self, thread_id: str, request_id: str, papel: str, conteudo: str) -> bool:
+        """Grava uma mensagem; devolve False se já existia (retentativa)."""
+        ...
+
+    def carregar_resposta(
+        self, thread_id: str, request_id: str, papel: str = "assistant"
+    ) -> str | None:
+        """Conteúdo já gravado de uma mensagem, para devolver em retentativa."""
         ...
 
     def carregar_estado(self, thread_id: str) -> EstadoConversa:
@@ -113,7 +119,7 @@ class PostgresConversas:
                 {"role": str(linha[0]), "content": str(linha[1])} for linha in cursor.fetchall()
             ]
 
-    def salvar_mensagem(self, thread_id: str, request_id: str, papel: str, conteudo: str) -> None:
+    def salvar_mensagem(self, thread_id: str, request_id: str, papel: str, conteudo: str) -> bool:
         with self._conexao.cursor() as cursor:
             cursor.execute(
                 f"""
@@ -123,7 +129,21 @@ class PostgresConversas:
                 """,
                 (thread_id, request_id, papel, conteudo),
             )
+            inserida = cursor.rowcount > 0
         self._conexao.commit()
+        return inserida
+
+    def carregar_resposta(
+        self, thread_id: str, request_id: str, papel: str = "assistant"
+    ) -> str | None:
+        with self._conexao.cursor() as cursor:
+            cursor.execute(
+                f"SELECT conteudo FROM {self._schema}.mensagem "
+                "WHERE thread_id = %s AND request_id = %s AND papel = %s",
+                (thread_id, request_id, papel),
+            )
+            linha = cursor.fetchone()
+        return None if linha is None else str(linha[0])
 
     def carregar_estado(self, thread_id: str) -> EstadoConversa:
         with self._conexao.cursor(row_factory=dict_row) as cursor:

@@ -8,6 +8,7 @@ from typing import Any
 from .conhecimento.consulta import FonteTickets, consultar_ticket
 from .conhecimento.serializacao import para_dicionario
 from .modelo import EventoTexto, ModeloFerramentas
+from .persistencia.dominio import EstadoConversa
 from .persistencia.repositorio import RepositorioConversas
 
 ESQUEMA_CONSULTAR_TICKET: dict[str, Any] = {
@@ -147,7 +148,18 @@ class Agente:
                 async for evento in self._modelo.stream_eventos(mensagens, [], modelo)
                 if isinstance(evento, EventoTexto)
             ]
-            resumos.append({"indice_inicial": bloco["indice_inicial"], "resumo": "".join(pedacos)})
+            resumos.append(
+                {
+                    "indice_inicial": bloco["indice_inicial"],
+                    "article_ids": list(bloco["article_ids"]),
+                    "fontes": [
+                        {"article_id": article_id, "data": artigos[article_id]["data"]}
+                        for article_id in bloco["article_ids"]
+                        if article_id in artigos
+                    ],
+                    "resumo": "".join(pedacos),
+                }
+            )
         return {
             "status": "encontrado",
             "ticket": {
@@ -196,11 +208,27 @@ class Conversa:
     async def stream(
         self, chat_id: str, request_id: str, mensagens: list[dict[str, Any]]
     ) -> AsyncIterator[str]:
-        """Responde à nova mensagem, restaurando o histórico persistido do chat."""
+        """Responde à nova mensagem, restaurando o histórico e o estado persistidos."""
         thread_id = self._conversas.resolver_thread(chat_id)
         historico = self._conversas.carregar_mensagens(thread_id)
+        estado = self._conversas.carregar_estado(thread_id)
         nova = _ultima_mensagem(mensagens)
-        self._conversas.salvar_mensagem(thread_id, request_id, "user", str(nova["content"]))
+        nova_inserida = self._conversas.salvar_mensagem(
+            thread_id, request_id, "user", str(nova["content"])
+        )
+        if not nova_inserida:
+            resposta = self._conversas.carregar_resposta(thread_id, request_id)
+            if resposta is not None:
+                yield resposta
+                return
+
+        entrada: list[dict[str, Any]] = []
+        contexto = _contexto_estado(estado)
+        if contexto is not None:
+            entrada.append(contexto)
+        entrada.extend(historico)
+        if nova_inserida:
+            entrada.append(nova)
 
         ticket_em_foco: list[str] = []
 
@@ -210,15 +238,29 @@ class Conversa:
                 ticket_em_foco.append(str(ticket["tn"]))
 
         pedacos: list[str] = []
-        entrada = [*historico, nova]
         async for delta in self._agente.stream(entrada, self._nome_modelo, ao_ferramenta):
             pedacos.append(delta)
             yield delta
         self._conversas.salvar_mensagem(thread_id, request_id, "assistant", "".join(pedacos))
         if ticket_em_foco:
-            estado = self._conversas.carregar_estado(thread_id)
             estado.ticket_em_foco = ticket_em_foco[-1]
             self._conversas.salvar_estado(thread_id, estado)
+
+
+def _contexto_estado(estado: EstadoConversa) -> dict[str, Any] | None:
+    partes = []
+    if estado.fila_selecionada:
+        partes.append(f"fila selecionada: {estado.fila_selecionada}")
+    if estado.ticket_em_foco:
+        partes.append(f"ticket em foco: {estado.ticket_em_foco}")
+    if estado.esclarecimentos:
+        partes.append("esclarecimentos pendentes: " + "; ".join(estado.esclarecimentos))
+    if not partes:
+        return None
+    return {
+        "role": "system",
+        "content": "Estado da conversa (persistido): " + "; ".join(partes) + ".",
+    }
 
 
 def _ultima_mensagem(mensagens: list[dict[str, Any]]) -> dict[str, Any]:

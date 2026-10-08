@@ -6,7 +6,7 @@
 
 **Status:** ready-for-human
 
-- [x] A API deste servidor, em formato OpenAI, envia uma mensagem e recebe a resposta completa em streaming
+- [ ] A Open WebUI, apontada para a API deste servidor, envia uma mensagem e recebe a resposta completa em streaming
 - [x] URL/base e alias do modelo vêm do `.env`; nenhum segredo no código
 - [x] Falha do proxy é reportada sem travar a conversa
 - [x] Requisição real registrada como evidência (Etapa 1 do MVP)

@@ -23,11 +23,20 @@ class RepoFake:
             {"role": m["role"], "content": m["content"]} for m in self.mensagens.get(thread_id, [])
         ]
 
-    def salvar_mensagem(self, thread_id: str, request_id: str, papel: str, conteudo: str) -> None:
+    def salvar_mensagem(self, thread_id: str, request_id: str, papel: str, conteudo: str) -> bool:
         lista = self.mensagens.setdefault(thread_id, [])
         if any(m["req"] == request_id and m["role"] == papel for m in lista):
-            return
+            return False
         lista.append({"role": papel, "content": conteudo, "req": request_id})
+        return True
+
+    def carregar_resposta(
+        self, thread_id: str, request_id: str, papel: str = "assistant"
+    ) -> str | None:
+        for mensagem in self.mensagens.get(thread_id, []):
+            if mensagem["req"] == request_id and mensagem["role"] == papel:
+                return mensagem["content"]
+        return None
 
     def carregar_estado(self, thread_id: str) -> EstadoConversa:
         return self.estados.get(thread_id, EstadoConversa())
@@ -100,13 +109,32 @@ async def test_identificador_estavel_e_ligado_ao_thread() -> None:
 
 async def test_retentativa_da_mesma_requisicao_nao_duplica() -> None:
     repo = RepoFake()
-    conversa = Conversa(AgenteFake(), repo, "m")  # type: ignore[arg-type]
+    agente = AgenteFake()
+    conversa = Conversa(agente, repo, "m")  # type: ignore[arg-type]
 
-    await _responder(conversa, "chat1", "req-x", "oi")
-    await _responder(conversa, "chat1", "req-x", "oi")
+    primeira = await _responder(conversa, "chat1", "req-x", "oi")
+    segunda = await _responder(conversa, "chat1", "req-x", "oi")
 
     mensagens = repo.mensagens["t1"]
     assert [m["role"] for m in mensagens] == ["user", "assistant"]
+    assert len(agente.recebidas) == 1
+    assert segunda == primeira
+
+
+async def test_estado_persistido_entra_no_contexto_ao_retomar() -> None:
+    repo = RepoFake()
+    repo.estados["t1"] = EstadoConversa(
+        fila_selecionada="Infraestrutura", ticket_em_foco="2026011600004"
+    )
+    agente = AgenteFake()
+    conversa = Conversa(agente, repo, "m")  # type: ignore[arg-type]
+
+    await _responder(conversa, "chat1", "r1", "e aí?")
+
+    contexto = agente.recebidas[0][0]
+    assert contexto["role"] == "system"
+    assert "ticket em foco: 2026011600004" in contexto["content"]
+    assert "fila selecionada: Infraestrutura" in contexto["content"]
 
 
 async def test_ticket_em_foco_e_persistido() -> None:
