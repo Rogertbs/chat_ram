@@ -21,7 +21,7 @@ class Settings(BaseSettings):
     rag_schema: str = "rag"
     embedding_model: str = "Qwen/Qwen3-Embedding-0.6B"
     embedding_dimension: int = 1024
-    embedding_dimensions: int | None = None
+    embedding_truncate_to: int | None = None
     embedding_batch: int = 64
     trecho_max_chars: int = 2000
     trecho_overlap_chars: int = 200

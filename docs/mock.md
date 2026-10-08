@@ -25,16 +25,16 @@ Aponte o `.env` para o mock e para o proxy de desenvolvimento:
 
 ```env
 POSTGRES18_DB=otrs_mock
-LITELLM_BASE_URL=https://openrouter.ai/api/v1
+LITELLM_BASE_URL=https://openrouter.ai/api
 LITELLM_API_KEY=sk-or-v1-...
 MODEL_ALIAS=nvidia/nemotron-3-super-120b-a12b:free
 EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free
 EMBEDDING_DIMENSION=1024
-EMBEDDING_DIMENSIONS=1024
+EMBEDDING_TRUNCATE_TO=1024
 EMBEDDING_BATCH=16
 ```
 
-O Nemotron free é nativo em 2048; `EMBEDDING_DIMENSIONS=1024` pede o truncamento MRL no servidor, mantendo o schema `vector(1024)` do ADR-0001. Se preferir não truncar, use `EMBEDDING_DIMENSION=2048` e remova `EMBEDDING_DIMENSIONS`.
+O Nemotron free é nativo em 2048; `EMBEDDING_TRUNCATE_TO=1024` corta localmente para as primeiras 1024 dimensões e renormaliza em L2 (MRL), mantendo o schema `vector(1024)` do ADR-0001. O HNSW do pgvector não indexa acima de 2000 dimensões, então 1024 é o alvo seguro.
 
 Rode a Preparação:
 

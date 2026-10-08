@@ -41,28 +41,24 @@ def test_envia_modelo_e_textos_no_payload() -> None:
     assert corpo["input"] == ["olá"]
 
 
-def test_omite_dimensions_por_padrao() -> None:
-    embeddings = LiteLLMEmbeddings("http://proxy", "sk", modelo="emb", dimensao=3)
+def test_trunca_e_normaliza_localmente() -> None:
+    embeddings = LiteLLMEmbeddings("http://proxy", "sk", modelo="emb", dimensao=2, truncar_para=2)
 
     with respx.mock(base_url="http://proxy") as mock:
-        rota = mock.post("/v1/embeddings").mock(return_value=_resposta([1.0, 2.0, 3.0]))
-        embeddings.embed(["olá"])
-        corpo = httpx.Response(200, content=rota.calls[0].request.content).json()
+        mock.post("/v1/embeddings").mock(return_value=_resposta([3.0, 4.0, 5.0, 6.0]))
+        resultado = embeddings.embed(["olá"])
 
-    assert "dimensions" not in corpo
+    assert resultado == [[0.6, 0.8]]
 
 
-def test_envia_dimensions_quando_configurado() -> None:
-    embeddings = LiteLLMEmbeddings(
-        "http://proxy", "sk", modelo="emb", dimensao=1024, dimensions=1024
-    )
+def test_nao_trunca_por_padrao() -> None:
+    embeddings = LiteLLMEmbeddings("http://proxy", "sk", modelo="emb", dimensao=4)
 
     with respx.mock(base_url="http://proxy") as mock:
-        rota = mock.post("/v1/embeddings").mock(return_value=_resposta([1.0] * 1024))
-        embeddings.embed(["olá"])
-        corpo = httpx.Response(200, content=rota.calls[0].request.content).json()
+        mock.post("/v1/embeddings").mock(return_value=_resposta([3.0, 4.0, 5.0, 6.0]))
+        resultado = embeddings.embed(["olá"])
 
-    assert corpo["dimensions"] == 1024
+    assert resultado == [[3.0, 4.0, 5.0, 6.0]]
 
 
 def test_respeita_o_tamanho_do_lote() -> None:
