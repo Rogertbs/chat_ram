@@ -1,16 +1,33 @@
 """Camada de conversa: liga o modelo às ferramentas de Conhecimento OTRS."""
 
 import json
+import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
 from .conhecimento.busca import Embeddings, FonteBusca, FonteFilas, buscar_casos, resolver_filas
 from .conhecimento.consulta import FonteTickets, consultar_ticket
+from .conhecimento.dominio import StatusConsulta
 from .conhecimento.serializacao import casos_para_dicionario, para_dicionario
 from .modelo import EventoTexto, ModeloFerramentas
 from .persistencia.dominio import EstadoConversa
 from .persistencia.repositorio import RepositorioConversas
+
+ROTULO_SUGESTAO = "Sugestão do modelo — não validada no histórico"
+
+SISTEMA = (
+    "Você é o assistente que consulta o histórico do OTRS. Regras:\n"
+    "- Toda conclusão sobre o histórico deve citar a fonte conferível: número e título "
+    "do ticket, data e article_id do trecho usado.\n"
+    "- Nunca invente número de ticket, data ou trecho; use apenas o que as ferramentas "
+    "retornarem. Se a ferramenta disser que o ticket não existe, informe isso.\n"
+    "- Ao consultar um ticket por número, informe a fila dele. A consulta explícita por "
+    "número não altera o filtro de fila das buscas seguintes.\n"
+    "- Se não houver solução documentada no histórico, declare explicitamente a ausência "
+    f'e apresente uma alternativa APENAS sob o rótulo "{ROTULO_SUGESTAO}".\n'
+    "- Nunca atribua uma sugestão do modelo aos tickets."
+)
 
 ESQUEMA_CONSULTAR_TICKET: dict[str, Any] = {
     "type": "function",
@@ -283,10 +300,12 @@ class Conversa:
         agente: Agente,
         conversas: RepositorioConversas,
         nome_modelo: str,
+        fonte_tickets: FonteTickets | None = None,
     ) -> None:
         self._agente = agente
         self._conversas = conversas
         self._nome_modelo = nome_modelo
+        self._fonte_tickets = fonte_tickets
 
     async def stream(
         self, chat_id: str, request_id: str, mensagens: list[dict[str, Any]]
@@ -305,10 +324,18 @@ class Conversa:
                 yield resposta
                 return
 
-        entrada: list[dict[str, Any]] = []
+        entrada: list[dict[str, Any]] = [{"role": "system", "content": SISTEMA}]
         mensagem_estado = _contexto_estado(estado)
         if mensagem_estado is not None:
             entrada.append(mensagem_estado)
+        if (
+            self._fonte_tickets is not None
+            and estado.ticket_em_foco
+            and not _menciona_numero(str(nova["content"]))
+        ):
+            foco = _contexto_ticket(self._fonte_tickets, estado.ticket_em_foco)
+            if foco is not None:
+                entrada.append(foco)
         entrada.extend(historico)
         if nova_inserida:
             entrada.append(nova)
@@ -329,6 +356,39 @@ class Conversa:
             estado.fila_selecionada = contexto.get("fila_selecionada")
             estado.ticket_em_foco = contexto.get("ticket_em_foco")
             self._conversas.salvar_estado(thread_id, estado)
+
+
+LIMITE_CONTEXTO_TICKET = 8000
+
+
+def _contexto_ticket(fonte: FonteTickets, tn: str) -> dict[str, Any] | None:
+    """Monta o conteúdo do ticket em foco como contexto, com as fontes."""
+    resultado = consultar_ticket(fonte, tn)
+    if resultado.status != StatusConsulta.ENCONTRADO or resultado.ticket is None:
+        return None
+    ticket = resultado.ticket
+    partes = [
+        f"Ticket {ticket.tn} — {ticket.titulo} (fila {ticket.fila}, situação {ticket.situacao})"
+    ]
+    for artigo in ticket.artigos:
+        partes.append(
+            f"[article_id={artigo.article_id} data={artigo.data.isoformat()} "
+            f"visivel_cliente={artigo.visivel_cliente}] {artigo.assunto}\n{artigo.corpo}"
+        )
+    texto = "\n\n".join(partes)
+    if len(texto) > LIMITE_CONTEXTO_TICKET:
+        texto = texto[:LIMITE_CONTEXTO_TICKET] + "\n\n[cobertura parcial do ticket em foco]"
+    return {
+        "role": "system",
+        "content": (
+            "Conteúdo do ticket em foco (contexto para perguntas seguintes; cite as fontes):\n"
+            + texto
+        ),
+    }
+
+
+def _menciona_numero(texto: str) -> bool:
+    return re.search(r"\d{10,}", texto) is not None
 
 
 def _contexto_estado(estado: EstadoConversa) -> dict[str, Any] | None:

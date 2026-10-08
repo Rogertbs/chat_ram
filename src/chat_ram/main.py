@@ -41,5 +41,5 @@ agente = Agente(
 )
 conversas = PostgresConversas(conexao, schema=settings.conversa_schema)
 conversas.garantir_estrutura()
-conversa = Conversa(agente, conversas, settings.model_alias)
+conversa = Conversa(agente, conversas, settings.model_alias, fonte_tickets=tickets)
 app = create_app(modelo, settings, agente, conversa)

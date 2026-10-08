@@ -229,3 +229,22 @@ async def test_resolver_filas_define_a_fila_no_contexto() -> None:
         pass
 
     assert contexto["fila_selecionada"] == "Nivel 1"
+
+
+async def test_consulta_por_numero_preserva_o_filtro_de_fila() -> None:
+    fonte = FonteFake()
+    modelo = ModeloFake(
+        [
+            [EventoFerramentas([_chamada('{"numero":"123"}')])],
+            [EventoTexto("ok")],
+        ]
+    )
+    agente = Agente(modelo, [ferramenta_consultar_ticket(fonte)])
+    contexto: dict[str, Any] = {"fila_selecionada": "Nivel 2"}
+
+    async for _ in agente.stream([{"role": "user", "content": "veja o ticket 123"}], "m", contexto):
+        pass
+
+    assert contexto["fila_selecionada"] == "Nivel 2"
+    tool = next(m for m in modelo.chamadas[1]["mensagens"] if m["role"] == "tool")
+    assert '"fila": "Nivel 1"' in tool["content"]

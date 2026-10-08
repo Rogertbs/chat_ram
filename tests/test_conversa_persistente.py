@@ -1,8 +1,12 @@
 from collections.abc import AsyncIterator
+from datetime import UTC, datetime
 from typing import Any
 
+from chat_ram.conhecimento.dominio import ArtigoBruto, TicketBruto
 from chat_ram.conversa import Conversa
 from chat_ram.persistencia.dominio import EstadoConversa
+
+DATA = datetime(2026, 1, 1, tzinfo=UTC)
 
 
 class RepoFake:
@@ -45,6 +49,16 @@ class RepoFake:
         self.estados[thread_id] = estado
 
 
+class FonteTicketsFake:
+    def buscar_por_tn(self, tn: str) -> list[TicketBruto]:
+        return [
+            TicketBruto(tn=tn, ticket_id=1, titulo="Tronco SIP", fila="Nivel 2", situacao="aberto")
+        ]
+
+    def artigos_do_ticket(self, ticket_id: int) -> list[ArtigoBruto]:
+        return [ArtigoBruto(6, ticket_id, DATA, True, "Assunto", "Corpo do ticket")]
+
+
 class AgenteFake:
     def __init__(self, ticket: str | None = None, deltas: tuple[str, ...] = ("ok",)) -> None:
         self._ticket = ticket
@@ -78,7 +92,7 @@ async def test_retomar_restaura_o_historico() -> None:
     await _responder(conversa, "chat1", "r1", "oi")
     await _responder(conversa, "chat1", "r2", "e o ticket 123?")
 
-    segunda = agente.recebidas[1]
+    segunda = [m for m in agente.recebidas[1] if m["role"] != "system"]
     assert [m["role"] for m in segunda] == ["user", "assistant", "user"]
     assert segunda[0]["content"] == "oi"
     assert segunda[2]["content"] == "e o ticket 123?"
@@ -93,7 +107,7 @@ async def test_duas_conversas_nao_vazam_contexto() -> None:
     await _responder(conversa, "chatB", "r2", "assunto B")
 
     assert repo.chats["chatA"] != repo.chats["chatB"]
-    recebidas_b = agente.recebidas[1]
+    recebidas_b = [m for m in agente.recebidas[1] if m["role"] != "system"]
     assert [m["content"] for m in recebidas_b] == ["assunto B"]
 
 
@@ -131,10 +145,10 @@ async def test_estado_persistido_entra_no_contexto_ao_retomar() -> None:
 
     await _responder(conversa, "chat1", "r1", "e aí?")
 
-    contexto = agente.recebidas[0][0]
-    assert contexto["role"] == "system"
-    assert "ticket em foco: 2026011600004" in contexto["content"]
-    assert "fila selecionada: Infraestrutura" in contexto["content"]
+    sistema = [m for m in agente.recebidas[0] if m["role"] == "system"]
+    texto = " ".join(m["content"] for m in sistema)
+    assert "ticket em foco: 2026011600004" in texto
+    assert "fila selecionada: Infraestrutura" in texto
 
 
 async def test_ticket_em_foco_e_persistido() -> None:
@@ -144,3 +158,40 @@ async def test_ticket_em_foco_e_persistido() -> None:
     await _responder(conversa, "chat1", "r1", "veja o ticket 2026011600004")
 
     assert repo.estados["t1"].ticket_em_foco == "2026011600004"
+
+
+async def test_sistema_traz_as_regras_e_o_rotulo_da_sugestao() -> None:
+    agente = AgenteFake()
+    conversa = Conversa(agente, RepoFake(), "m")  # type: ignore[arg-type]
+
+    await _responder(conversa, "chat1", "r1", "oi")
+
+    sistema = agente.recebidas[0][0]
+    assert sistema["role"] == "system"
+    assert "Sugestão do modelo — não validada no histórico" in sistema["content"]
+    assert "nunca invente" in sistema["content"].lower()
+
+
+async def test_pergunta_seguinte_usa_o_conteudo_do_ticket_em_foco() -> None:
+    repo = RepoFake()
+    repo.estados["t1"] = EstadoConversa(ticket_em_foco="2026011600004")
+    agente = AgenteFake()
+    conversa = Conversa(agente, repo, "m", fonte_tickets=FonteTicketsFake())  # type: ignore[arg-type]
+
+    await _responder(conversa, "chat1", "r1", "e qual foi a solução?")
+
+    sistema = " ".join(m["content"] for m in agente.recebidas[0] if m["role"] == "system")
+    assert "Corpo do ticket" in sistema
+    assert "article_id=6" in sistema
+
+
+async def test_consulta_com_numero_nao_injeta_o_foco() -> None:
+    repo = RepoFake()
+    repo.estados["t1"] = EstadoConversa(ticket_em_foco="2026011600004")
+    agente = AgenteFake()
+    conversa = Conversa(agente, repo, "m", fonte_tickets=FonteTicketsFake())  # type: ignore[arg-type]
+
+    await _responder(conversa, "chat1", "r1", "consulte o ticket 2026011900010")
+
+    sistema = " ".join(m["content"] for m in agente.recebidas[0] if m["role"] == "system")
+    assert "Corpo do ticket" not in sistema
