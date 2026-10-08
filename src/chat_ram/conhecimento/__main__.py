@@ -11,6 +11,8 @@ from collections.abc import Sequence
 import psycopg
 
 from ..config import Settings
+from ..preparacao.embeddings import LiteLLMEmbeddings
+from ..preparacao.repositorio import PostgresTrechos
 from .mcp import criar_servidor
 from .repositorio import PostgresTickets
 
@@ -28,7 +30,17 @@ def main(argv: Sequence[str] | None = None) -> int:
     settings = Settings()  # type: ignore[call-arg]
     conexao = psycopg.connect(**settings.conexao_otrs())  # type: ignore[arg-type]
     try:
-        servidor = criar_servidor(PostgresTickets(conexao))
+        tickets = PostgresTickets(conexao)
+        trechos = PostgresTrechos(conexao, schema=settings.rag_schema)
+        embeddings = LiteLLMEmbeddings(
+            settings.litellm_base_url,
+            settings.litellm_api_key,
+            modelo=settings.embedding_model,
+            dimensao=settings.embedding_dimension,
+            lote=settings.embedding_batch,
+            truncar_para=settings.embedding_truncate_to,
+        )
+        servidor = criar_servidor(tickets, busca=trechos, embeddings=embeddings, filas=tickets)
         servidor.run(transport=args.transporte)
     finally:
         conexao.close()

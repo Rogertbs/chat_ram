@@ -5,8 +5,9 @@ from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
+from .conhecimento.busca import Embeddings, FonteBusca, FonteFilas, buscar_casos, resolver_filas
 from .conhecimento.consulta import FonteTickets, consultar_ticket
-from .conhecimento.serializacao import para_dicionario
+from .conhecimento.serializacao import casos_para_dicionario, para_dicionario
 from .modelo import EventoTexto, ModeloFerramentas
 from .persistencia.dominio import EstadoConversa
 from .persistencia.repositorio import RepositorioConversas
@@ -36,30 +37,114 @@ ESQUEMA_CONSULTAR_TICKET: dict[str, Any] = {
 }
 
 
+ESQUEMA_BUSCAR_CASOS: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "buscar_casos",
+        "description": (
+            "Busca casos semelhantes no histórico pela descrição do problema. Aplica o "
+            "filtro de fila informado (ou o selecionado na conversa). Devolve os melhores "
+            "trechos com fontes (ticket, fila, article_id, data). Se 'alcance_suficiente' "
+            "for falso, declare o alcance da busca e não invente; não apresente trechos "
+            "abaixo do threshold como se fossem solução."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "pergunta": {"type": "string", "description": "Descrição do problema técnico."},
+                "filas": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Filas para restringir a busca (opcional).",
+                },
+            },
+            "required": ["pergunta"],
+        },
+    },
+}
+
+ESQUEMA_RESOLVER_FILAS: dict[str, Any] = {
+    "type": "function",
+    "function": {
+        "name": "resolver_filas",
+        "description": (
+            "Resolve o nome de uma fila informado pelo usuário. Devolve os candidatos. "
+            "Se 'ambiguo' for verdadeiro, peça esclarecimento ao usuário antes de buscar."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "texto": {"type": "string", "description": "Nome de fila informado pelo usuário."}
+            },
+            "required": ["texto"],
+        },
+    },
+}
+
+
 @dataclass(frozen=True)
 class Ferramenta:
-    """Ferramenta exposta ao modelo: esquema e execução."""
+    """Ferramenta exposta ao modelo: esquema e execução.
+
+    A execução recebe os argumentos e um contexto mutável da conversa
+    (fila selecionada, ticket em foco) que as ferramentas podem ler e atualizar.
+    """
 
     nome: str
     esquema: dict[str, Any]
-    executar: Callable[[dict[str, Any]], dict[str, Any]]
+    executar: Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]
 
 
 def ferramenta_consultar_ticket(fonte: FonteTickets) -> Ferramenta:
     """Cria a ferramenta `consultar_ticket` sobre uma fonte de tickets."""
 
-    def executar(argumentos: dict[str, Any]) -> dict[str, Any]:
+    def executar(argumentos: dict[str, Any], contexto: dict[str, Any]) -> dict[str, Any]:
         numero = str(argumentos.get("numero", ""))
         try:
-            return para_dicionario(consultar_ticket(fonte, numero))
+            saida = para_dicionario(consultar_ticket(fonte, numero))
         except Exception as exc:  # noqa: BLE001
             return {
                 "status": "falha",
                 "ticket": None,
                 "mensagem": f"falha técnica ao consultar: {exc}",
             }
+        if saida.get("status") == "encontrado" and saida.get("ticket"):
+            contexto["ticket_em_foco"] = str(saida["ticket"]["tn"])
+        return saida
 
     return Ferramenta("consultar_ticket", ESQUEMA_CONSULTAR_TICKET, executar)
+
+
+def ferramenta_buscar_casos(fonte: FonteBusca, embeddings: Embeddings) -> Ferramenta:
+    """Cria a ferramenta `buscar_casos` sobre os índices de trechos."""
+
+    def executar(argumentos: dict[str, Any], contexto: dict[str, Any]) -> dict[str, Any]:
+        pergunta = str(argumentos.get("pergunta", ""))
+        filas = argumentos.get("filas")
+        if filas:
+            if len(filas) == 1:
+                contexto["fila_selecionada"] = str(filas[0])
+        elif contexto.get("fila_selecionada"):
+            filas = [contexto["fila_selecionada"]]
+        try:
+            resultado = buscar_casos(fonte, embeddings, pergunta, filas)
+        except Exception as exc:  # noqa: BLE001
+            return {"status": "falha", "casos": [], "mensagem": f"falha técnica na busca: {exc}"}
+        return casos_para_dicionario(resultado)
+
+    return Ferramenta("buscar_casos", ESQUEMA_BUSCAR_CASOS, executar)
+
+
+def ferramenta_resolver_filas(fonte: FonteFilas) -> Ferramenta:
+    """Cria a ferramenta `resolver_filas` sobre a lista de filas do OTRS."""
+
+    def executar(argumentos: dict[str, Any], contexto: dict[str, Any]) -> dict[str, Any]:
+        resultado = resolver_filas(fonte.listar_filas(), str(argumentos.get("texto", "")))
+        if len(resultado.candidatos) == 1 and not resultado.ambiguo:
+            contexto["fila_selecionada"] = resultado.candidatos[0]
+        return {"candidatos": list(resultado.candidatos), "ambiguo": resultado.ambiguo}
+
+    return Ferramenta("resolver_filas", ESQUEMA_RESOLVER_FILAS, executar)
 
 
 class Agente:
@@ -78,10 +163,11 @@ class Agente:
         self,
         mensagens: list[dict[str, Any]],
         modelo: str,
-        ao_ferramenta: Callable[[dict[str, Any]], None] | None = None,
+        contexto: dict[str, Any] | None = None,
     ) -> AsyncIterator[str]:
         """Produz os deltas da resposta, executando ferramentas se o modelo pedir."""
         conversa = list(mensagens)
+        contexto = contexto if contexto is not None else {}
         chamadas: list[dict[str, Any]] = []
         async for evento in self._modelo.stream_eventos(conversa, self.esquemas, modelo):
             if isinstance(evento, EventoTexto):
@@ -93,10 +179,7 @@ class Agente:
 
         conversa.append({"role": "assistant", "content": "", "tool_calls": chamadas})
         for chamada in chamadas:
-            saida = self._executar(chamada)
-            if ao_ferramenta is not None:
-                ao_ferramenta(saida)
-            saida = await self._compactar(saida, modelo)
+            saida = await self._compactar(self._executar(chamada, contexto), modelo)
             conversa.append(
                 {
                     "role": "tool",
@@ -108,7 +191,7 @@ class Agente:
             if isinstance(evento, EventoTexto):
                 yield evento.texto
 
-    def _executar(self, chamada: dict[str, Any]) -> dict[str, Any]:
+    def _executar(self, chamada: dict[str, Any], contexto: dict[str, Any]) -> dict[str, Any]:
         funcao = chamada.get("function") or {}
         nome = str(funcao.get("name", ""))
         ferramenta = self._por_nome.get(nome)
@@ -118,7 +201,7 @@ class Agente:
                 "ticket": None,
                 "mensagem": f"ferramenta desconhecida: {nome}",
             }
-        return ferramenta.executar(_argumentos(funcao.get("arguments")))
+        return ferramenta.executar(_argumentos(funcao.get("arguments")), contexto)
 
     async def _compactar(self, saida: dict[str, Any], modelo: str) -> dict[str, Any]:
         """Resume tickets extensos em blocos cronológicos antes da resposta final."""
@@ -223,27 +306,28 @@ class Conversa:
                 return
 
         entrada: list[dict[str, Any]] = []
-        contexto = _contexto_estado(estado)
-        if contexto is not None:
-            entrada.append(contexto)
+        mensagem_estado = _contexto_estado(estado)
+        if mensagem_estado is not None:
+            entrada.append(mensagem_estado)
         entrada.extend(historico)
         if nova_inserida:
             entrada.append(nova)
 
-        ticket_em_foco: list[str] = []
-
-        def ao_ferramenta(saida: dict[str, Any]) -> None:
-            ticket = saida.get("ticket")
-            if saida.get("status") == "encontrado" and ticket:
-                ticket_em_foco.append(str(ticket["tn"]))
-
+        contexto: dict[str, Any] = {
+            "fila_selecionada": estado.fila_selecionada,
+            "ticket_em_foco": estado.ticket_em_foco,
+        }
         pedacos: list[str] = []
-        async for delta in self._agente.stream(entrada, self._nome_modelo, ao_ferramenta):
+        async for delta in self._agente.stream(entrada, self._nome_modelo, contexto):
             pedacos.append(delta)
             yield delta
         self._conversas.salvar_mensagem(thread_id, request_id, "assistant", "".join(pedacos))
-        if ticket_em_foco:
-            estado.ticket_em_foco = ticket_em_foco[-1]
+        if (
+            contexto.get("fila_selecionada") != estado.fila_selecionada
+            or contexto.get("ticket_em_foco") != estado.ticket_em_foco
+        ):
+            estado.fila_selecionada = contexto.get("fila_selecionada")
+            estado.ticket_em_foco = contexto.get("ticket_em_foco")
             self._conversas.salvar_estado(thread_id, estado)
 
 

@@ -42,3 +42,12 @@ def test_numero_inexistente_nao_e_encontrado(
 
     assert resultado.status == StatusConsulta.NAO_ENCONTRADO
     assert resultado.ticket is None
+
+
+def test_lista_as_filas_disponiveis(conexao_pg18: psycopg.Connection[Any]) -> None:
+    fonte = PostgresTickets(conexao_pg18)
+
+    filas = fonte.listar_filas()
+
+    assert filas
+    assert filas == sorted(filas)

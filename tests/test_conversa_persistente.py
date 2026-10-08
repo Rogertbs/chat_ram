@@ -55,11 +55,11 @@ class AgenteFake:
         self,
         mensagens: list[dict[str, Any]],
         modelo: str,
-        ao_ferramenta: Any = None,
+        contexto: dict[str, Any] | None = None,
     ) -> AsyncIterator[str]:
         self.recebidas.append([dict(m) for m in mensagens])
-        if ao_ferramenta is not None and self._ticket is not None:
-            ao_ferramenta({"status": "encontrado", "ticket": {"tn": self._ticket}})
+        if contexto is not None and self._ticket is not None:
+            contexto["ticket_em_foco"] = self._ticket
         for delta in self._deltas:
             yield delta
 

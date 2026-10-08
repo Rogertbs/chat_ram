@@ -68,3 +68,8 @@ class PostgresTickets:
                 )
                 for linha in cursor.fetchall()
             ]
+
+    def listar_filas(self) -> list[str]:
+        with self._conexao.cursor() as cursor:
+            cursor.execute("SELECT name FROM queue ORDER BY name")
+            return [str(linha[0]) for linha in cursor.fetchall()]

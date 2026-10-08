@@ -77,3 +77,37 @@ class ResultadoConsulta:
 
     status: StatusConsulta
     ticket: TicketConsulta | None = None
+
+
+@dataclass(frozen=True)
+class Caso:
+    """Trecho de um caso semelhante, já fundido, com a fonte conferível."""
+
+    tn: str
+    ticket_id: int
+    article_id: int
+    fila: str
+    data: datetime
+    visivel_cliente: bool
+    posicao: int
+    content: str
+    similaridade: float
+    score: float
+
+
+@dataclass(frozen=True)
+class ResultadoCasos:
+    """Resultado de `buscar_casos`."""
+
+    casos: tuple[Caso, ...]
+    alcance_suficiente: bool
+    filas_aplicadas: tuple[str, ...] | None = None
+    mensagem: str | None = None
+
+
+@dataclass(frozen=True)
+class ResultadoFilas:
+    """Resultado de `resolver_filas`: candidatos e se o nome é ambíguo."""
+
+    candidatos: tuple[str, ...]
+    ambiguo: bool

@@ -52,6 +52,12 @@ class RepositorioBusca(Protocol):
         """Busca por proximidade de cosseno, opcionalmente restrita a filas."""
         ...
 
+    def similaridades(
+        self, embedding: list[float], chaves: list[tuple[str, int, int]]
+    ) -> dict[tuple[str, int, int], float]:
+        """Similaridade de cosseno de cada trecho (tn, article_id, posicao)."""
+        ...
+
 
 class RepositorioTrechos(RepositorioPreparacao, RepositorioBusca, Protocol):
     """Contrato completo da tabela de trechos: escrita e busca."""
@@ -231,6 +237,29 @@ class PostgresTrechos:
         with self._conexao.cursor(row_factory=dict_row) as cursor:
             cursor.execute(sql, [_vetor(embedding), *parametros, limite])
             return [_resultado(linha) for linha in cursor.fetchall()]
+
+    def similaridades(
+        self, embedding: list[float], chaves: list[tuple[str, int, int]]
+    ) -> dict[tuple[str, int, int], float]:
+        if not chaves:
+            return {}
+        valores = ", ".join(["(%s, %s, %s)"] * len(chaves))
+        parametros: list[Any] = [_vetor(embedding)]
+        for tn, article_id, posicao in chaves:
+            parametros.extend([tn, article_id, posicao])
+        sql = f"""
+            SELECT tn, article_id, posicao, 1 - (embedding <=> %s::vector) AS similaridade
+            FROM {self._schema}.trechos
+            WHERE (tn, article_id, posicao) IN ({valores})
+        """
+        with self._conexao.cursor(row_factory=dict_row) as cursor:
+            cursor.execute(sql, parametros)
+            return {
+                (str(linha["tn"]), int(linha["article_id"]), int(linha["posicao"])): float(
+                    linha["similaridade"]
+                )
+                for linha in cursor.fetchall()
+            }
 
 
 def _filtro_filas(filas: list[str] | None) -> tuple[str, list[Any]]:

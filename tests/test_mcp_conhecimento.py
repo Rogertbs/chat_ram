@@ -38,6 +38,38 @@ async def _chamar(servidor: Any, numero: str) -> dict[str, Any]:
     return cast("dict[str, Any]", resultado)
 
 
+async def _chamar_tool(servidor: Any, nome: str, argumentos: dict[str, Any]) -> dict[str, Any]:
+    resultado = await servidor.call_tool(nome, argumentos)
+    if isinstance(resultado, tuple):
+        return cast("dict[str, Any]", resultado[1])
+    return cast("dict[str, Any]", resultado)
+
+
+class BuscaFake:
+    def buscar_lexical(self, consulta: str, limite: int = 50, filas: Any = None) -> list[Any]:
+        return []
+
+    def buscar_vetorial(
+        self, embedding: list[float], limite: int = 50, filas: Any = None
+    ) -> list[Any]:
+        return []
+
+    def similaridades(
+        self, embedding: list[float], chaves: list[tuple[str, int, int]]
+    ) -> dict[tuple[str, int, int], float]:
+        return {chave: 0.9 for chave in chaves}
+
+
+class EmbeddingsFake:
+    def embed(self, textos: list[str]) -> list[list[float]]:
+        return [[0.1, 0.2, 0.3] for _ in textos]
+
+
+class FilasFake:
+    def listar_filas(self) -> list[str]:
+        return ["Nivel 1", "Nivel 2"]
+
+
 async def test_ferramenta_consultar_ticket_e_listada() -> None:
     servidor = criar_servidor(FonteFake())
 
@@ -74,3 +106,22 @@ async def test_ferramenta_reporta_falha_tecnica_sem_quebrar() -> None:
     assert resultado["status"] == "falha"
     assert resultado["ticket"] is None
     assert "falha técnica" in resultado["mensagem"]
+
+
+async def test_ferramentas_de_busca_e_filas_sao_listadas() -> None:
+    servidor = criar_servidor(
+        FonteFake(), busca=BuscaFake(), embeddings=EmbeddingsFake(), filas=FilasFake()
+    )
+
+    nomes = {ferramenta.name for ferramenta in await servidor.list_tools()}
+
+    assert {"consultar_ticket", "buscar_casos", "resolver_filas"} <= nomes
+
+
+async def test_resolver_filas_via_mcp() -> None:
+    servidor = criar_servidor(FonteFake(), filas=FilasFake())
+
+    resultado = await _chamar_tool(servidor, "resolver_filas", {"texto": "nivel 1"})
+
+    assert resultado["candidatos"] == ["Nivel 1"]
+    assert resultado["ambiguo"] is False

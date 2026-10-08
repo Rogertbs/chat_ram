@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from .dominio import ResultadoConsulta
+from .dominio import ResultadoCasos, ResultadoConsulta
 
 
 def para_dicionario(resultado: ResultadoConsulta) -> dict[str, Any]:
@@ -38,4 +38,28 @@ def para_dicionario(resultado: ResultadoConsulta) -> dict[str, Any]:
                 for bloco in ticket.blocos
             ],
         },
+    }
+
+
+def casos_para_dicionario(resultado: ResultadoCasos) -> dict[str, Any]:
+    """Converte os casos semelhantes em um dicionário JSON-serializável."""
+    return {
+        "alcance_suficiente": resultado.alcance_suficiente,
+        "filas_aplicadas": list(resultado.filas_aplicadas) if resultado.filas_aplicadas else None,
+        "mensagem": resultado.mensagem,
+        "casos": [
+            {
+                "tn": caso.tn,
+                "ticket_id": caso.ticket_id,
+                "article_id": caso.article_id,
+                "fila": caso.fila,
+                "data": caso.data.isoformat(),
+                "visivel_cliente": caso.visivel_cliente,
+                "posicao": caso.posicao,
+                "content": caso.content,
+                "similaridade": caso.similaridade,
+                "score": caso.score,
+            }
+            for caso in resultado.casos
+        ],
     }

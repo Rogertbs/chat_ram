@@ -133,6 +133,25 @@ def test_salvar_substitui_trechos_quando_o_artigo_encurta(
     assert [r.content for r in repositorio.buscar_lexical("parte")] == ["parte única"]
 
 
+def test_similaridades_dos_trechos(repositorio: PostgresTrechos) -> None:
+    config = _config()
+    repositorio.garantir_estrutura(config)
+    repositorio.registrar_modelo(config)
+    repositorio.salvar(
+        [
+            _trecho(1, "sobre vpn", [1.0, 0.0, 0.0]),
+            _trecho(2, "sobre impressora", [0.0, 1.0, 0.0]),
+        ]
+    )
+
+    similaridades = repositorio.similaridades(
+        [1.0, 0.0, 0.0], [("2025010100001", 1, 0), ("2025010100001", 2, 0)]
+    )
+
+    assert similaridades[("2025010100001", 1, 0)] == pytest.approx(1.0, abs=1e-5)
+    assert similaridades[("2025010100001", 2, 0)] == pytest.approx(0.0, abs=1e-5)
+
+
 def test_modelo_ou_dimensao_diferente_e_recusado(repositorio: PostgresTrechos) -> None:
     repositorio.garantir_estrutura(_config())
     repositorio.registrar_modelo(_config())

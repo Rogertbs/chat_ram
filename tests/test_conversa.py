@@ -3,8 +3,14 @@ from datetime import UTC, datetime
 from typing import Any
 
 from chat_ram.conhecimento.dominio import ArtigoBruto, TicketBruto
-from chat_ram.conversa import Agente, ferramenta_consultar_ticket
+from chat_ram.conversa import (
+    Agente,
+    ferramenta_buscar_casos,
+    ferramenta_consultar_ticket,
+    ferramenta_resolver_filas,
+)
 from chat_ram.modelo import EventoFerramentas, EventoModelo, EventoTexto
+from chat_ram.preparacao.dominio import ResultadoBusca
 
 DATA = datetime(2026, 1, 1, 9, 0, tzinfo=UTC)
 
@@ -51,6 +57,36 @@ class FonteLonga:
             ArtigoBruto(1, ticket_id, DATA, True, "A1", "x" * 3000),
             ArtigoBruto(2, ticket_id, DATA, True, "A2", "y" * 3000),
         ]
+
+
+class BuscaFake:
+    def __init__(self, itens: list[ResultadoBusca]) -> None:
+        self._itens = itens
+
+    def buscar_lexical(
+        self, consulta: str, limite: int = 50, filas: list[str] | None = None
+    ) -> list[ResultadoBusca]:
+        return self._itens
+
+    def buscar_vetorial(
+        self, embedding: list[float], limite: int = 50, filas: list[str] | None = None
+    ) -> list[ResultadoBusca]:
+        return self._itens
+
+    def similaridades(
+        self, embedding: list[float], chaves: list[tuple[str, int, int]]
+    ) -> dict[tuple[str, int, int], float]:
+        return {chave: 0.9 for chave in chaves}
+
+
+class EmbeddingsFake:
+    def embed(self, textos: list[str]) -> list[list[float]]:
+        return [[0.1, 0.2, 0.3] for _ in textos]
+
+
+class FilasFake:
+    def listar_filas(self) -> list[str]:
+        return ["Nivel 1", "Nivel 2", "Nivel 3"]
 
 
 def _chamada(argumentos: str, id_: str = "c1") -> dict[str, Any]:
@@ -135,3 +171,61 @@ async def test_ticket_extenso_e_resumido_por_blocos() -> None:
     assert '"total_blocos": 2' in mensagem_tool["content"]
     assert '"fontes"' in mensagem_tool["content"]
     assert '"article_id": 1' in mensagem_tool["content"]
+
+
+def _chamada_de(nome: str, argumentos: str, id_: str = "c1") -> dict[str, Any]:
+    return {"id": id_, "type": "function", "function": {"name": nome, "arguments": argumentos}}
+
+
+async def test_ferramenta_buscar_casos_retorna_fontes() -> None:
+    item = ResultadoBusca(
+        tn="2026011600004",
+        ticket_id=1,
+        article_id=5,
+        fila="Nivel 2",
+        data=DATA,
+        visivel_cliente=True,
+        posicao=0,
+        content="tronco sip sem áudio",
+        score=0.0,
+    )
+    modelo = ModeloFake(
+        [
+            [
+                EventoFerramentas(
+                    [_chamada_de("buscar_casos", '{"pergunta":"tronco sip","filas":["Nivel 2"]}')]
+                )
+            ],
+            [EventoTexto("Encontrei casos.")],
+        ]
+    )
+    agente = Agente(modelo, [ferramenta_buscar_casos(BuscaFake([item]), EmbeddingsFake())])
+    contexto: dict[str, Any] = {}
+
+    saida = [
+        delta
+        async for delta in agente.stream([{"role": "user", "content": "tronco cai"}], "m", contexto)
+    ]
+
+    assert saida == ["Encontrei casos."]
+    tool = next(m for m in modelo.chamadas[1]["mensagens"] if m["role"] == "tool")
+    assert "2026011600004" in tool["content"]
+    assert contexto["fila_selecionada"] == "Nivel 2"
+
+
+async def test_resolver_filas_define_a_fila_no_contexto() -> None:
+    modelo = ModeloFake(
+        [
+            [EventoFerramentas([_chamada_de("resolver_filas", '{"texto":"nivel 1"}')])],
+            [EventoTexto("ok")],
+        ]
+    )
+    agente = Agente(modelo, [ferramenta_resolver_filas(FilasFake())])
+    contexto: dict[str, Any] = {}
+
+    async for _ in agente.stream(
+        [{"role": "user", "content": "busque na fila nivel 1"}], "m", contexto
+    ):
+        pass
+
+    assert contexto["fila_selecionada"] == "Nivel 1"
