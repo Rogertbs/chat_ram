@@ -178,3 +178,24 @@ async def test_guardrail_endpoint_sinaliza_fora_do_escopo() -> None:
     assert fora.json()["flagged"] is True
     assert "helpdesk" in fora.json()["mensagem"]
     assert sem_chave.status_code == 401
+
+
+async def test_usa_chat_id_do_metadata_da_open_webui() -> None:
+    cfg = Settings(
+        litellm_base_url="http://proxy",
+        litellm_api_key="sk",
+        model_alias="alvo",
+        chat_ram_api_key=None,
+    )
+    conversa = ConversaFake()
+    app = create_app(ModeloFake([]), cfg, None, conversa)  # type: ignore[arg-type]
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://teste") as client:
+        resposta = await client.post(
+            "/v1/chat/completions",
+            json={**PEDIDO, "metadata": {"chat_id": "chat-meta", "message_id": "msg-1"}},
+        )
+
+    assert resposta.status_code == 200
+    assert resposta.headers["x-conversation-id"] == "chat-meta"
+    assert conversa.chamadas == [("chat-meta", "msg-1")]

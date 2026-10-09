@@ -28,6 +28,8 @@ class ChatRequest(BaseModel):
     model: str | None = None
     messages: list[Mensagem]
     stream: bool = False
+    # A Open WebUI encaminha metadados (chat_id, message_id, session_id) no corpo.
+    metadata: dict[str, Any] | None = None
 
 
 class GuardrailRequest(BaseModel):
@@ -81,9 +83,10 @@ def create_app(
     async def completions(req: ChatRequest, request: Request) -> Any:
         nome_modelo = req.model or settings.model_alias
         mensagens = [m.model_dump() for m in req.messages]
-        chat_id = request.headers.get("x-conversation-id") or uuid4().hex
-        request_id = request.headers.get("x-request-id") or uuid4().hex
-        cabecalhos = {"x-conversation-id": chat_id}
+        meta = req.metadata or {}
+        chat_id = request.headers.get("x-conversation-id") or meta.get("chat_id") or uuid4().hex
+        request_id = request.headers.get("x-request-id") or meta.get("message_id") or uuid4().hex
+        cabecalhos = {"x-conversation-id": str(chat_id)}
 
         if conversa is not None:
             deltas = conversa.stream(chat_id, request_id, mensagens)
