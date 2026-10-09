@@ -170,6 +170,7 @@ async def test_sistema_traz_as_regras_e_o_rotulo_da_sugestao() -> None:
     assert sistema["role"] == "system"
     assert "Sugestão do modelo — não validada no histórico" in sistema["content"]
     assert "nunca invente" in sistema["content"].lower()
+    assert "escopo estrito" in sistema["content"].lower()
 
 
 async def test_pergunta_seguinte_usa_o_conteudo_do_ticket_em_foco() -> None:

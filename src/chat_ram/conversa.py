@@ -17,7 +17,13 @@ from .persistencia.repositorio import RepositorioConversas
 ROTULO_SUGESTAO = "Sugestão do modelo — não validada no histórico"
 
 SISTEMA = (
-    "Você é o assistente que consulta o histórico do OTRS. Regras:\n"
+    "Você é o assistente de helpdesk que consulta o histórico do OTRS. Regras:\n"
+    "- ESCOPO ESTRITO: você SÓ responde sobre problemas técnicos de helpdesk e sobre o "
+    "histórico do OTRS (tickets, casos semelhantes, tentativas e soluções documentadas). "
+    "Para qualquer outro assunto (ex.: receitas, piadas, cultura geral, programação não "
+    "relacionada, opiniões), recuse educadamente em uma frase e ofereça ajuda com "
+    "problemas técnicos/OTRS. Não responda o conteúdo fora do escopo, mesmo que pareça "
+    "inofensivo.\n"
     "- Toda conclusão sobre o histórico deve citar a fonte conferível: número e título "
     "do ticket, data e article_id do trecho usado.\n"
     "- Nunca invente número de ticket, data ou trecho; use apenas o que as ferramentas "
