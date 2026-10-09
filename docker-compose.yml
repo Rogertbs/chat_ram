@@ -41,6 +41,12 @@ services:
       WEBUI_ADMIN_NAME: ${WEBUI_ADMIN_NAME:-Admin}
       ENABLE_SIGNUP: "false"
       ENABLE_PASSWORD_VALIDATION: "true"
+      # Desliga tarefas auxiliares que também chamam o modelo (economiza cota).
+      ENABLE_TITLE_GENERATION: "false"
+      ENABLE_TAGS_GENERATION: "false"
+      ENABLE_FOLLOW_UP_GENERATION: "false"
+      ENABLE_AUTOCOMPLETE_GENERATION: "false"
+      ENABLE_SEARCH_QUERY_GENERATION: "false"
     ports:
       - "3000:8080"
     volumes:
