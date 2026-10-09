@@ -4,7 +4,7 @@ import json
 import re
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Protocol
 
 from .conhecimento.busca import Embeddings, FonteBusca, FonteFilas, buscar_casos, resolver_filas
 from .conhecimento.consulta import FonteTickets, consultar_ticket
@@ -15,6 +15,19 @@ from .persistencia.dominio import EstadoConversa
 from .persistencia.repositorio import RepositorioConversas
 
 ROTULO_SUGESTAO = "Sugestão do modelo — não validada no histórico"
+
+RECUSA_ESCOPO = (
+    "Desculpe, só posso ajudar com problemas técnicos de helpdesk e consultas ao "
+    "histórico do OTRS. Se precisar de ajuda com algum ticket ou caso técnico, estou "
+    "à disposição."
+)
+
+_INSTRUCAO_CLASSIFICADOR = (
+    "Você é um classificador de escopo. Considere o diálogo e decida se a ÚLTIMA "
+    "mensagem do usuário trata de um problema técnico de helpdesk/OTRS ou de um "
+    "acompanhamento de atendimento. Responda apenas 'SIM' (está no escopo) ou 'NAO' "
+    "(fora do escopo, como receitas, cultura geral, opiniões ou assuntos não técnicos)."
+)
 
 SISTEMA = (
     "Você é o assistente de helpdesk que consulta o histórico do OTRS. Regras:\n"
@@ -298,6 +311,39 @@ def _argumentos(texto: object) -> dict[str, Any]:
     return dados if isinstance(dados, dict) else {}
 
 
+class ClassificadorEscopo(Protocol):
+    """Decide se a última mensagem do usuário está no escopo do assistente."""
+
+    async def esta_no_escopo(self, mensagens: list[dict[str, Any]], modelo: str) -> bool: ...
+
+
+class ClassificadorLiteLLM:
+    """Classificador de escopo que usa o próprio modelo, sem ferramentas.
+
+    Só bloqueia quando o modelo responde explicitamente 'NAO'; em caso de dúvida
+    ou falha, deixa passar (o prompt de sistema continua como segunda barreira).
+    """
+
+    def __init__(self, modelo: ModeloFerramentas) -> None:
+        self._modelo = modelo
+
+    async def esta_no_escopo(self, mensagens: list[dict[str, Any]], modelo: str) -> bool:
+        conversa = [
+            {"role": "system", "content": _INSTRUCAO_CLASSIFICADOR},
+            *mensagens[-6:],
+        ]
+        try:
+            pedacos = [
+                evento.texto
+                async for evento in self._modelo.stream_eventos(conversa, [], modelo)
+                if isinstance(evento, EventoTexto)
+            ]
+        except Exception:  # noqa: BLE001
+            return True
+        decisao = "".join(pedacos).strip().upper()
+        return not (decisao.startswith("NÃO") or decisao.startswith("NAO"))
+
+
 class Conversa:
     """Persiste mensagens e estado por thread_id e responde com o agente."""
 
@@ -307,11 +353,13 @@ class Conversa:
         conversas: RepositorioConversas,
         nome_modelo: str,
         fonte_tickets: FonteTickets | None = None,
+        guardrail: ClassificadorEscopo | None = None,
     ) -> None:
         self._agente = agente
         self._conversas = conversas
         self._nome_modelo = nome_modelo
         self._fonte_tickets = fonte_tickets
+        self._guardrail = guardrail
 
     async def stream(
         self, chat_id: str, request_id: str, mensagens: list[dict[str, Any]]
@@ -328,6 +376,13 @@ class Conversa:
             resposta = self._conversas.carregar_resposta(thread_id, request_id)
             if resposta is not None:
                 yield resposta
+                return
+
+        if self._guardrail is not None and nova_inserida:
+            para_classificar = [*historico, nova][-6:]
+            if not await self._guardrail.esta_no_escopo(para_classificar, self._nome_modelo):
+                self._conversas.salvar_mensagem(thread_id, request_id, "assistant", RECUSA_ESCOPO)
+                yield RECUSA_ESCOPO
                 return
 
         entrada: list[dict[str, Any]] = [{"role": "system", "content": SISTEMA}]

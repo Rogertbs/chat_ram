@@ -213,3 +213,39 @@ async def test_usa_historico_da_ui_quando_nao_ha_persistido() -> None:
 
     recebidas = [m for m in agente.recebidas[0] if m["role"] != "system"]
     assert [m["content"] for m in recebidas] == ["oi", "olá", "e agora?"]
+
+
+class GuardrailFake:
+    def __init__(self, permitir: bool) -> None:
+        self._permitir = permitir
+        self.chamadas = 0
+
+    async def esta_no_escopo(self, mensagens: list[dict[str, Any]], modelo: str) -> bool:
+        self.chamadas += 1
+        return self._permitir
+
+
+async def test_guardrail_bloqueia_fora_do_escopo() -> None:
+    repo = RepoFake()
+    agente = AgenteFake()
+    guardrail = GuardrailFake(permitir=False)
+    conversa = Conversa(agente, repo, "m", guardrail=guardrail)  # type: ignore[arg-type]
+
+    saida = await _responder(conversa, "chat1", "r1", "me dê uma receita de bolo")
+
+    assert "helpdesk" in saida
+    assert agente.recebidas == []
+    assert guardrail.chamadas == 1
+    assert [m["role"] for m in repo.mensagens["t1"]] == ["user", "assistant"]
+
+
+async def test_guardrail_libera_dentro_do_escopo() -> None:
+    repo = RepoFake()
+    agente = AgenteFake()
+    guardrail = GuardrailFake(permitir=True)
+    conversa = Conversa(agente, repo, "m", guardrail=guardrail)  # type: ignore[arg-type]
+
+    saida = await _responder(conversa, "chat1", "r1", "consulte o ticket 123")
+
+    assert saida == "ok"
+    assert len(agente.recebidas) == 1

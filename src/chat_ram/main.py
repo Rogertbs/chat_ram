@@ -7,6 +7,7 @@ from .config import Settings
 from .conhecimento.repositorio import PostgresTickets
 from .conversa import (
     Agente,
+    ClassificadorLiteLLM,
     Conversa,
     ferramenta_buscar_casos,
     ferramenta_consultar_ticket,
@@ -41,5 +42,11 @@ agente = Agente(
 )
 conversas = PostgresConversas(conexao, schema=settings.conversa_schema)
 conversas.garantir_estrutura()
-conversa = Conversa(agente, conversas, settings.model_alias, fonte_tickets=tickets)
+conversa = Conversa(
+    agente,
+    conversas,
+    settings.model_alias,
+    fonte_tickets=tickets,
+    guardrail=ClassificadorLiteLLM(modelo),
+)
 app = create_app(modelo, settings, agente, conversa)
