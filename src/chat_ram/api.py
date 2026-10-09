@@ -3,6 +3,7 @@
 import hmac
 import json
 import logging
+import re
 import time
 from collections.abc import AsyncIterator
 from typing import Any
@@ -17,6 +18,9 @@ from .conversa import RECUSA_ESCOPO, ClassificadorEscopo, Conversa
 from .modelo import Modelo
 
 _logger = logging.getLogger(__name__)
+
+# Marcador que o filtro da Open WebUI injeta na última mensagem com o id da conversa.
+_MARCADOR_CONVERSA = re.compile(r"\[\[chat_ram_id:([^\]\s]+)\]\]")
 
 
 class Mensagem(BaseModel):
@@ -84,8 +88,15 @@ def create_app(
         nome_modelo = req.model or settings.model_alias
         mensagens = [m.model_dump() for m in req.messages]
         meta = req.metadata or {}
-        chat_id = request.headers.get("x-conversation-id") or meta.get("chat_id") or uuid4().hex
-        request_id = request.headers.get("x-request-id") or meta.get("message_id") or uuid4().hex
+        chat_id = request.headers.get("x-conversation-id") or meta.get("chat_id")
+        request_id = request.headers.get("x-request-id") or meta.get("message_id")
+        for mensagem in mensagens:
+            achado = _MARCADOR_CONVERSA.search(str(mensagem.get("content", "")))
+            if achado:
+                chat_id = chat_id or achado.group(1)
+                mensagem["content"] = _MARCADOR_CONVERSA.sub("", str(mensagem["content"])).strip()
+        chat_id = chat_id or uuid4().hex
+        request_id = request_id or uuid4().hex
         cabecalhos = {"x-conversation-id": str(chat_id)}
 
         if conversa is not None:

@@ -20,6 +20,16 @@ class Filter:
         self.valves = self.Valves()
 
     async def inlet(self, body: dict, **kwargs) -> dict:
+        # Encaminha o id da conversa ao backend (a Open WebUI não envia metadata).
+        chat_id = (body.get("metadata") or {}).get("chat_id") or body.get("chat_id")
+        if chat_id:
+            for mensagem in reversed(body.get("messages", [])):
+                if mensagem.get("role") == "user":
+                    conteudo = mensagem.get("content", "")
+                    if isinstance(conteudo, str) and "[[chat_ram_id:" not in conteudo:
+                        mensagem["content"] = f"{conteudo}\n[[chat_ram_id:{chat_id}]]"
+                    break
+
         texto = ""
         for mensagem in reversed(body.get("messages", [])):
             if mensagem.get("role") == "user":

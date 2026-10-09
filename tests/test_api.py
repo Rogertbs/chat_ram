@@ -199,3 +199,24 @@ async def test_usa_chat_id_do_metadata_da_open_webui() -> None:
     assert resposta.status_code == 200
     assert resposta.headers["x-conversation-id"] == "chat-meta"
     assert conversa.chamadas == [("chat-meta", "msg-1")]
+
+
+async def test_extrai_marcador_de_conversa_da_mensagem() -> None:
+    cfg = Settings(
+        litellm_base_url="http://proxy",
+        litellm_api_key="sk",
+        model_alias="alvo",
+        chat_ram_api_key=None,
+    )
+    conversa = ConversaFake()
+    app = create_app(ModeloFake([]), cfg, None, conversa)  # type: ignore[arg-type]
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://teste") as client:
+        resposta = await client.post(
+            "/v1/chat/completions",
+            json={"messages": [{"role": "user", "content": "oi [[chat_ram_id:abc-123]]"}]},
+        )
+
+    assert resposta.status_code == 200
+    assert resposta.headers["x-conversation-id"] == "abc-123"
+    assert conversa.chamadas[0][0] == "abc-123"
