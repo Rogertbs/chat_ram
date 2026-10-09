@@ -66,6 +66,7 @@ A API fica em `http://127.0.0.1:8000` (`/v1/models`, `/v1/chat/completions`; Swa
 
 - **Backend**: os endpoints `/v1/*` exigem `Authorization: Bearer $CHAT_RAM_API_KEY` (chave no `.env`); sem chave configurada, ficam abertos. `/health` é sempre aberto (usado pelo healthcheck). A porta `8000` é publicada apenas em `127.0.0.1`; a Open WebUI acessa a API pela rede interna.
 - **Open WebUI**: login habilitado; o admin é criado no primeiro boot a partir de `WEBUI_ADMIN_EMAIL`/`WEBUI_ADMIN_PASSWORD` (no `.env`), com **signup desabilitado**. Use essas credenciais para entrar. A Open WebUI chama o backend com a mesma `CHAT_RAM_API_KEY`.
+- **Guardrail de escopo**: duas camadas no backend (prompt de sistema + `GuardrailEscopo`: palavras-chave e, se ambíguo, um classificador; ligado por `GUARDRAIL_ESCOPO`). Além disso, um **filtro da Open WebUI** (`openwebui/filtro_escopo.py`, alvo `make filtro`) bloqueia no `inlet` antes de chegar ao backend, consultando `POST /guardrail`. Instale/atualize com `make filtro`.
 - Para produção, sirva a UI por **HTTPS** (proxy reverso com TLS) e restrinja a porta `3000` no firewall/security group. Com HTTPS, ative também `WEBUI_AUTH_COOKIE_SECURE=true` e `WEBUI_AUTH_COOKIE_SAME_SITE=strict`.
 - Trocar a senha do admin: ajuste `WEBUI_ADMIN_PASSWORD` no `.env` (vale só enquanto não houver usuários) ou altere pelo painel da Open WebUI.
 

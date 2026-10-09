@@ -51,4 +51,4 @@ conversa = Conversa(
     fonte_tickets=tickets,
     guardrail=guardrail,
 )
-app = create_app(modelo, settings, agente, conversa)
+app = create_app(modelo, settings, agente, conversa, guardrail)

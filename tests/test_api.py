@@ -147,3 +147,34 @@ async def test_exige_api_key_quando_configurada() -> None:
     assert chave_errada.status_code == 401
     assert chave_certa.status_code == 200
     assert saude.status_code == 200
+
+
+class GuardrailFake:
+    def __init__(self, no_escopo: bool) -> None:
+        self._no_escopo = no_escopo
+
+    async def esta_no_escopo(self, mensagens: list[dict[str, str]], modelo: str) -> bool:
+        return self._no_escopo
+
+
+async def test_guardrail_endpoint_sinaliza_fora_do_escopo() -> None:
+    cfg = Settings(
+        litellm_base_url="http://proxy",
+        litellm_api_key="sk",
+        model_alias="alvo",
+        chat_ram_api_key="segredo",
+    )
+    app = create_app(ModeloFake([]), cfg, None, None, GuardrailFake(no_escopo=False))
+    transport = ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://teste") as client:
+        fora = await client.post(
+            "/guardrail",
+            json={"input": "receita de bolo"},
+            headers={"authorization": "Bearer segredo"},
+        )
+        sem_chave = await client.post("/guardrail", json={"input": "receita de bolo"})
+
+    assert fora.status_code == 200
+    assert fora.json()["flagged"] is True
+    assert "helpdesk" in fora.json()["mensagem"]
+    assert sem_chave.status_code == 401

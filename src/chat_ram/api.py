@@ -13,7 +13,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from .config import Settings
-from .conversa import Conversa
+from .conversa import RECUSA_ESCOPO, ClassificadorEscopo, Conversa
 from .modelo import Modelo
 
 _logger = logging.getLogger(__name__)
@@ -30,11 +30,16 @@ class ChatRequest(BaseModel):
     stream: bool = False
 
 
+class GuardrailRequest(BaseModel):
+    input: str
+
+
 def create_app(
     modelo: Modelo,
     settings: Settings,
     agente: Modelo | None = None,
     conversa: Conversa | None = None,
+    guardrail: ClassificadorEscopo | None = None,
 ) -> FastAPI:
     app = FastAPI(title="chat_ram")
 
@@ -51,6 +56,19 @@ def create_app(
     @app.get("/health")
     async def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.post("/guardrail", dependencies=[Depends(verificar_api_key)])
+    async def guardrail_endpoint(req: GuardrailRequest) -> dict[str, Any]:
+        """Classifica o texto como dentro/fora do escopo (usado pela moderação da UI)."""
+        if guardrail is None:
+            return {"flagged": False, "mensagem": ""}
+        no_escopo = await guardrail.esta_no_escopo(
+            [{"role": "user", "content": req.input}], settings.model_alias
+        )
+        return {
+            "flagged": not no_escopo,
+            "mensagem": "" if no_escopo else RECUSA_ESCOPO,
+        }
 
     @app.get("/v1/models", dependencies=[Depends(verificar_api_key)])
     async def listar_modelos() -> dict[str, Any]:
