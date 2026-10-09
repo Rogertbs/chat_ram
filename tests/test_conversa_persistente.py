@@ -3,7 +3,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from chat_ram.conhecimento.dominio import ArtigoBruto, TicketBruto
-from chat_ram.conversa import Conversa
+from chat_ram.conversa import Conversa, GuardrailEscopo
 from chat_ram.persistencia.dominio import EstadoConversa
 
 DATA = datetime(2026, 1, 1, tzinfo=UTC)
@@ -249,3 +249,49 @@ async def test_guardrail_libera_dentro_do_escopo() -> None:
 
     assert saida == "ok"
     assert len(agente.recebidas) == 1
+
+
+class ClassificadorFake:
+    def __init__(self, permitir: bool) -> None:
+        self._permitir = permitir
+        self.chamadas = 0
+
+    async def esta_no_escopo(self, mensagens: list[dict[str, Any]], modelo: str) -> bool:
+        self.chamadas += 1
+        return self._permitir
+
+
+async def test_guardrail_palavra_fora_bloqueia_sem_classificador() -> None:
+    classificador = ClassificadorFake(permitir=True)
+    guardrail = GuardrailEscopo(classificador)
+
+    decisao = await guardrail.esta_no_escopo(
+        [{"role": "user", "content": "me dê uma receita de bolo"}], "m"
+    )
+
+    assert decisao is False
+    assert classificador.chamadas == 0
+
+
+async def test_guardrail_palavra_escopo_libera_sem_classificador() -> None:
+    classificador = ClassificadorFake(permitir=False)
+    guardrail = GuardrailEscopo(classificador)
+
+    decisao = await guardrail.esta_no_escopo(
+        [{"role": "user", "content": "o ramal 4021 não registra no asterisk"}], "m"
+    )
+
+    assert decisao is True
+    assert classificador.chamadas == 0
+
+
+async def test_guardrail_ambiguo_delega_ao_classificador() -> None:
+    classificador = ClassificadorFake(permitir=False)
+    guardrail = GuardrailEscopo(classificador)
+
+    decisao = await guardrail.esta_no_escopo(
+        [{"role": "user", "content": "me ajude com isso por favor"}], "m"
+    )
+
+    assert decisao is False
+    assert classificador.chamadas == 1

@@ -9,6 +9,7 @@ from .conversa import (
     Agente,
     ClassificadorLiteLLM,
     Conversa,
+    GuardrailEscopo,
     ferramenta_buscar_casos,
     ferramenta_consultar_ticket,
     ferramenta_resolver_filas,
@@ -42,11 +43,12 @@ agente = Agente(
 )
 conversas = PostgresConversas(conexao, schema=settings.conversa_schema)
 conversas.garantir_estrutura()
+guardrail = GuardrailEscopo(ClassificadorLiteLLM(modelo)) if settings.guardrail_escopo else None
 conversa = Conversa(
     agente,
     conversas,
     settings.model_alias,
     fonte_tickets=tickets,
-    guardrail=ClassificadorLiteLLM(modelo),
+    guardrail=guardrail,
 )
 app = create_app(modelo, settings, agente, conversa)

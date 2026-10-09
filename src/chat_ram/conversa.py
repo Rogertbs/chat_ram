@@ -344,6 +344,66 @@ class ClassificadorLiteLLM:
         return not (decisao.startswith("NÃO") or decisao.startswith("NAO"))
 
 
+_PALAVRAS_FORA = (
+    "receita",
+    "bolo",
+    "piada",
+    "poema",
+    "horóscopo",
+    "futebol",
+    "capital da",
+    "quem foi",
+    "conte uma história",
+    "me recomende um filme",
+)
+
+_PALAVRAS_ESCOPO = (
+    "ticket",
+    "chamado",
+    "otrs",
+    "fila",
+    "ramal",
+    "asterisk",
+    "sip",
+    "tronco",
+    "ura",
+    "dtmf",
+    "codec",
+    "vpn",
+    "impressora",
+    "correio de voz",
+    "helpdesk",
+    "atendimento",
+)
+
+
+class GuardrailEscopo:
+    """Guardrail em duas etapas: palavras-chave primeiro, classificador depois.
+
+    Palavras fora do escopo bloqueiam sem chamar o modelo; palavras no escopo
+    liberam sem chamar o modelo; o resto vai para o classificador. Assim só se
+    gasta uma chamada quando o caso é ambíguo.
+    """
+
+    def __init__(
+        self,
+        classificador: ClassificadorEscopo,
+        palavras_fora: tuple[str, ...] = _PALAVRAS_FORA,
+        palavras_escopo: tuple[str, ...] = _PALAVRAS_ESCOPO,
+    ) -> None:
+        self._classificador = classificador
+        self._fora = palavras_fora
+        self._escopo = palavras_escopo
+
+    async def esta_no_escopo(self, mensagens: list[dict[str, Any]], modelo: str) -> bool:
+        texto = str(_ultima_mensagem(mensagens).get("content", "")).casefold()
+        if any(palavra in texto for palavra in self._fora):
+            return False
+        if any(palavra in texto for palavra in self._escopo):
+            return True
+        return await self._classificador.esta_no_escopo(mensagens, modelo)
+
+
 class Conversa:
     """Persiste mensagens e estado por thread_id e responde com o agente."""
 

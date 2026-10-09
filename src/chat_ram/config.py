@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     # Chave exigida nos endpoints /v1/* (vazio = sem autenticação).
     chat_ram_api_key: str | None = None
 
+    # Guardrail de escopo (palavras-chave + classificador). Desligue para economizar.
+    guardrail_escopo: bool = True
+
     postgres18_host: str = "127.0.0.1"
     postgres18_port: int = 5435
     postgres18_db: str = "otrs"
