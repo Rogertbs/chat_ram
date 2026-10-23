@@ -21,6 +21,8 @@ FROM article_data_mime adm
 JOIN article a ON a.id = adm.article_id
 JOIN ticket t ON t.id = a.ticket_id
 JOIN queue q ON q.id = t.queue_id
+WHERE (%(inicio)s::bigint IS NULL OR adm.article_id >= %(inicio)s)
+  AND (%(fim)s::bigint IS NULL OR adm.article_id <= %(fim)s)
 ORDER BY adm.article_id
 """
 
@@ -36,15 +38,22 @@ class FonteHistorico(Protocol):
 class PostgresHistorico:
     """Lê artigo_data_mime ligado a article, ticket e queue na cópia fixa."""
 
-    def __init__(self, conexao: psycopg.Connection[Any]) -> None:
+    def __init__(
+        self,
+        conexao: psycopg.Connection[Any],
+        inicio: int | None = None,
+        fim: int | None = None,
+    ) -> None:
         self._conexao = conexao
+        self._inicio = inicio
+        self._fim = fim
 
     def artigos(self, limite: int | None = None) -> Iterator[Artigo]:
         sql = _SQL_ARTIGOS
-        parametros: tuple[int, ...] = ()
+        parametros: dict[str, int | None] = {"inicio": self._inicio, "fim": self._fim}
         if limite is not None:
-            sql = f"{sql} LIMIT %s"
-            parametros = (limite,)
+            sql = f"{sql} LIMIT %(limite)s"
+            parametros["limite"] = limite
         with self._conexao.cursor(name="artigos_otrs", row_factory=dict_row) as cursor:
             cursor.itersize = 1000
             cursor.execute(sql, parametros)

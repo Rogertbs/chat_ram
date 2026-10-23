@@ -23,6 +23,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--nao-retomar", action="store_true", help="reprocessa inclusive artigos já gravados"
     )
+    parser.add_argument(
+        "--inicio", type=int, default=None, help="article_id inicial (inclusive)"
+    )
+    parser.add_argument("--fim", type=int, default=None, help="article_id final (inclusive)")
+    parser.add_argument(
+        "--sem-indices",
+        action="store_true",
+        help="não cria os índices BM25/HNSW durante a carga (recrie ao final)",
+    )
     args = parser.parse_args(argv)
 
     settings = Settings()  # type: ignore[call-arg]
@@ -34,12 +43,13 @@ def main(argv: list[str] | None = None) -> int:
         sobreposicao=settings.trecho_overlap_chars,
         lote_embeddings=settings.embedding_batch,
         retomar=not args.nao_retomar,
+        criar_indices=not args.sem_indices,
     )
     conexao_leitura = _conectar(settings)
     conexao_escrita = _conectar(settings)
     try:
         relatorio = preparar(
-            PostgresHistorico(conexao_leitura),
+            PostgresHistorico(conexao_leitura, inicio=args.inicio, fim=args.fim),
             LiteLLMEmbeddings(
                 settings.litellm_base_url,
                 settings.litellm_api_key,

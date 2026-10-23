@@ -65,6 +65,7 @@ class ConfiguracaoPreparacao:
     sobreposicao: int = 200
     lote_embeddings: int = 64
     retomar: bool = True
+    criar_indices: bool = True
 
 
 @dataclass

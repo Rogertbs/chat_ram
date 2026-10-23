@@ -111,14 +111,15 @@ class PostgresTrechos:
                 )
                 """
             )
-            cursor.execute(
-                f"CREATE INDEX IF NOT EXISTS trechos_bm25 ON {s}.trechos "
-                "USING bm25(content) WITH (text_config='portuguese')"
-            )
-            cursor.execute(
-                f"CREATE INDEX IF NOT EXISTS trechos_vector ON {s}.trechos "
-                "USING hnsw (embedding vector_cosine_ops)"
-            )
+            if config.criar_indices:
+                cursor.execute(
+                    f"CREATE INDEX IF NOT EXISTS trechos_bm25 ON {s}.trechos "
+                    "USING bm25(content) WITH (text_config='portuguese')"
+                )
+                cursor.execute(
+                    f"CREATE INDEX IF NOT EXISTS trechos_vector ON {s}.trechos "
+                    "USING hnsw (embedding vector_cosine_ops)"
+                )
             cursor.execute(f"CREATE INDEX IF NOT EXISTS trechos_fila ON {s}.trechos (fila)")
         self._conexao.commit()
 
