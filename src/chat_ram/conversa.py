@@ -445,10 +445,10 @@ class Conversa:
                 yield RECUSA_ESCOPO
                 return
 
-        entrada: list[dict[str, Any]] = [{"role": "system", "content": SISTEMA}]
+        partes_sistema: list[str] = [SISTEMA]
         mensagem_estado = _contexto_estado(estado)
         if mensagem_estado is not None:
-            entrada.append(mensagem_estado)
+            partes_sistema.append(str(mensagem_estado["content"]))
         if (
             self._fonte_tickets is not None
             and estado.ticket_em_foco
@@ -456,7 +456,10 @@ class Conversa:
         ):
             foco = _contexto_ticket(self._fonte_tickets, estado.ticket_em_foco)
             if foco is not None:
-                entrada.append(foco)
+                partes_sistema.append(str(foco["content"]))
+        entrada: list[dict[str, Any]] = [
+            {"role": "system", "content": "\n\n".join(partes_sistema)}
+        ]
         if historico:
             # Backend é a origem autoritativa quando a conversa é conhecida.
             entrada.extend(historico)
@@ -466,6 +469,7 @@ class Conversa:
             # Sem histórico persistido (ex.: Open WebUI sem id de conversa), usa o
             # histórico que a própria interface reenviou.
             entrada.extend(mensagens)
+        entrada = _unir_sistemas_iniciais(entrada)
 
         contexto: dict[str, Any] = {
             "fila_selecionada": estado.fila_selecionada,
@@ -532,6 +536,20 @@ def _contexto_estado(estado: EstadoConversa) -> dict[str, Any] | None:
         "role": "system",
         "content": "Estado da conversa (persistido): " + "; ".join(partes) + ".",
     }
+
+
+def _unir_sistemas_iniciais(mensagens: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Funde as mensagens system iniciais em uma só (o template do Qwen exige isso)."""
+    partes: list[str] = []
+    restantes: list[dict[str, Any]] = []
+    for mensagem in mensagens:
+        if not restantes and mensagem.get("role") == "system":
+            partes.append(str(mensagem.get("content", "")))
+        else:
+            restantes.append(mensagem)
+    if len(partes) <= 1:
+        return mensagens
+    return [{"role": "system", "content": "\n\n".join(partes)}, *restantes]
 
 
 def _ultima_mensagem(mensagens: list[dict[str, Any]]) -> dict[str, Any]:
